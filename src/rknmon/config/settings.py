@@ -1,0 +1,25 @@
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    app_name: str = "rknmon"
+    debug: bool = False
+    log_level: str = "INFO"
+
+    database_url: str = "postgresql://user:***@localhost/db"
+    pool_min_size: int = 1
+    pool_max_size: int = 10
+
+    probe_concurrency: int = 50
+    probe_interval_minutes: int = 10
+    probe_jitter_seconds: int = 30
+
+    event_retention_days: int = 365
+    result_retention_days: int = 90
+
+    proxy_url: str | None = None
+    external_vantage_url: str | None = None
+    external_vantage_api_key: str | None = None
+
+    model_config = {"env_file": ".env", "extra": "ignore"}
+
+settings = Settings()
