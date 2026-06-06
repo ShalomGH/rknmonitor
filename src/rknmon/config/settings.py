@@ -5,7 +5,7 @@ class Settings(BaseSettings):
     debug: bool = False
     log_level: str = "INFO"
 
-    database_url: str = "postgresql://user:***@localhost/db"
+    database_url: str = "postgresql://user:rknmon_dev@localhost/db"
     pool_min_size: int = 1
     pool_max_size: int = 10
 
@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     result_retention_days: int = 90
 
     proxy_url: str | None = None
+    alert_webhook_url: str | None = None
     external_vantage_url: str | None = None
     external_vantage_api_key: str | None = None
 
