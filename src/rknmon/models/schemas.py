@@ -10,6 +10,7 @@ class Target(BaseModel):
     category: Optional[str] = None
     source: str = "manual"
     is_active: bool = True
+    state: Optional[Literal["clear", "suspected", "blocked"]] = "clear"
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 

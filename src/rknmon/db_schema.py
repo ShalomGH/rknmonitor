@@ -13,6 +13,7 @@ async def init_schema():
                 category TEXT,
                 source TEXT DEFAULT 'manual',
                 is_active BOOLEAN DEFAULT true,
+                state VARCHAR(10) DEFAULT 'clear',
                 created_at TIMESTAMPTZ DEFAULT now(),
                 updated_at TIMESTAMPTZ DEFAULT now(),
                 CONSTRAINT uq_target_domain UNIQUE (domain)

@@ -16,11 +16,14 @@ async def probe_dns(domain: str, timeout: float = 5.0) -> Dict:
     async def resolve_with(name: str, resolver_ip: str | None):
         try:
             if resolver_ip:
-                resolver = aiodns.DNSResolver(nameservers=[resolver_ip], loop=loop)
+                resolver = aiodns.DNSResolver(nameservers=[resolver_ip])
             else:
-                resolver = aiodns.DNSResolver(loop=loop)
-            result = await resolver.query(domain, "A")
-            ips = [r.host for r in result] if isinstance(result, list) else [result.host]
+                resolver = aiodns.DNSResolver()
+            result = await resolver.query_dns(domain, "A")
+            if isinstance(result, list):
+                ips = [r.host for r in result]
+            else:
+                ips = [result.host]
             return {"resolver": name, "ips": ips, "error": None}
         except aiodns.error.DNSError as e:
             return {"resolver": name, "ips": [], "error": f"dns_error_{e.args[0]}"}

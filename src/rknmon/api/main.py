@@ -4,7 +4,7 @@ from prometheus_client import make_asgi_app, Counter, Histogram
 from rknmon.db import get_pool, close_pool
 from rknmon.db_schema import init_schema
 from rknmon.probes.scheduler import start_scheduler, shutdown_scheduler
-from rknmon.api import targets, events
+from rknmon.api import targets, events, alerts, probes
 
 REQUEST_COUNT = Counter("http_requests_total", "HTTP requests", ["method", "endpoint", "status"])
 REQUEST_DURATION = Histogram("http_request_duration_seconds", "HTTP request duration", ["method", "endpoint"])
@@ -21,6 +21,8 @@ async def lifespan(app: FastAPI):
 app = FastAPI(title="RKN Blocks Monitoring", version="0.1.0", lifespan=lifespan)
 app.include_router(targets.router)
 app.include_router(events.router)
+app.include_router(alerts.router)
+app.include_router(probes.router)
 
 prom_app = make_asgi_app()
 app.mount("/metrics", prom_app)
