@@ -11,9 +11,13 @@ src/rknmon/alerts/__init__.py
 src/rknmon/alerts/webhook.py
 src/rknmon/api/__init__.py
 src/rknmon/api/alerts.py
+src/rknmon/api/auth.py
+src/rknmon/api/deps.py
 src/rknmon/api/events.py
+src/rknmon/api/export.py
 src/rknmon/api/main.py
 src/rknmon/api/probes.py
+src/rknmon/api/stats.py
 src/rknmon/api/targets.py
 src/rknmon/config/__init__.py
 src/rknmon/config/settings.py

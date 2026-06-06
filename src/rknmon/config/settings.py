@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     external_vantage_url: str | None = None
     external_vantage_api_key: str | None = None
 
+    api_key: str = "dev-key-change-me"
+    rate_limit: str = "100/minute"
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 settings = Settings()

@@ -1,10 +1,12 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from rknmon.db import fetch
+from rknmon.api.deps import limiter
 
 router = APIRouter(prefix="/events", tags=["events"])
 
 @router.get("")
-async def list_events(target_id: int | None = None, limit: int = 100):
+@limiter.limit("100/minute")
+async def list_events(request: Request, target_id: int | None = None, limit: int = 100):
     if target_id:
         rows = await fetch(
             "SELECT * FROM events WHERE target_id = $1 ORDER BY created_at DESC LIMIT $2",

@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RKN Blocks Monitoring — Dashboard</title>
+<style>
+  body { font-family: system-ui, -apple-system, sans-serif; margin:0; background:#0f172a; color:#e2e8f0; }
+  .container { max-width: 1200px; margin: 0 auto; padding: 20px; }
+  h1 { margin: 0 0 20px; font-size: 1.5rem; color: #94a3b8; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px,1fr)); gap: 16px; margin-bottom: 24px; }
+  .card { background: #1e293b; border-radius: 8px; padding: 16px; }
+  .card h3 { margin: 0 0 8px; font-size: .85rem; color: #94a3b8; text-transform: uppercase; }
+  .card .big { font-size: 1.8rem; font-weight: 700; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .9rem; }
+  th, td { padding: 8px 10px; text-align: left; border-bottom: 1px solid #334155; }
+  th { color: #94a3b8; font-weight: 500; }
+  .badge { display:inline-block; padding:2px 8px; border-radius:4px; font-size:.75rem; font-weight:600; }
+  .blocked { background:#7f1d1d; color:#fca5a5; }
+  .suspected { background:#713f12; color:#fde047; }
+  .clear { background:#064e3b; color:#6ee7b7; }
+  .row-link:hover { cursor: pointer; background: #334155; }
+  .chart-wrap { height: 280px; }
+</style>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.3/dist/chart.umd.min.js"></script>
+</head>
+<body>
+<div class="container">
+  <h1>Dashboard — RKN Block Monitoring</h1>
+  <div class="grid" id="stats-grid">
+    <div class="card"><h3>Targets active</h3><div class="big" id="st-active">—</div></div>
+    <div class="card"><h3>Blocked</h3><div class="big" id="st-blocked">—</div></div>
+    <div class="card"><h3>Suspected</h3><div class="big" id="st-suspected">—</div></div>
+    <div class="card"><h3>Events 24h</h3><div class="big" id="st-events">—</div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:20px;">
+    <h3>Events over last 14 days</h3>
+    <div class="chart-wrap"><canvas id="events-chart"></canvas></div>
+  </div>
+
+  <div class="card">
+    <h3>State distribution</h3>
+    <div class="chart-wrap" style="height:220px;"><canvas id="state-chart"></canvas></div>
+  </div>
+
+  <div class="card" style="margin-top:20px;">
+    <h3>Active targets</h3>
+    <div class="table-wrap">
+      <table id="targets-table">
+        <thead><tr><th>ID</th><th>Domain</th><th>State</th><th>Category</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+(async function(){
+  const r = await fetch('/ui/dashboard_data');
+  const d = await r.json();
+
+  const st = d.by_state || {};
+  document.getElementById('st-active').textContent = (d.targets||[]).length;
+  document.getElementById('st-blocked').textContent = st.blocked||0;
+  document.getElementById('st-suspected').textContent = st.suspected||0;
+  document.getElementById('st-events').textContent = Object.values(d.events_24h||{}).reduce((a,b)=>a+b,0);
+
+  const rows = (d.targets||[]).map(t => `<tr class="row-link" onclick="location.href='/ui/target/${t.id}'">`
+    +`<td>${t.id}</td><td>${t.domain}</td>`
+    +`<td><span class="badge ${t.state||'clear'}">${t.state||'clear'}</span></td>`
+    +`<td>${t.category||'—'}</td></tr>`).join('');
+  document.querySelector('#targets-table tbody').innerHTML = rows;
+
+  const days = {};
+  (d.daily_events||[]).forEach(e => { days[e.day] = days[e.day]||{}; days[e.day][e.event_type]=(days[e.day][e.event_type]||0)+e.n; });
+  const labels = Object.keys(days).sort();
+  const blocked = labels.map(k => days[k]['target_blocked']||0);
+  const unblocked = labels.map(k => days[k]['target_unblocked']||0);
+
+  new Chart(document.getElementById('events-chart'), {
+    type: 'line',
+    data: { labels, datasets: [
+      { label:'Blocked', data:blocked, borderColor:'#f87171', tension:.3 },
+      { label:'Unblocked', data:unblocked, borderColor:'#34d399', tension:.3 },
+    ]},
+    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{color:'#cbd5e1'}}}, scales:{x:{ticks:{color:'#94a3b8'}}, y:{ticks:{color:'#94a3b8'}}}}
+  });
+
+  new Chart(document.getElementById('state-chart'), {
+    type: 'doughnut',
+    data: { labels: Object.keys(st), datasets: [{ data: Object.values(st), backgroundColor:['#34d399','#facc15','#f87171'] }] },
+    options: { responsive:true, maintainAspectRatio:false, plugins:{legend:{labels:{color:'#cbd5e1'}}}}
+  });
+})();
+</script>
+</body>
+</html>

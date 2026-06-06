@@ -1,13 +1,27 @@
 from contextlib import asynccontextmanager
-from fastapi import FastAPI
+from pathlib import Path
+from fastapi import FastAPI, Request
+from fastapi.staticfiles import StaticFiles
+from fastapi.templating import Jinja2Templates
 from prometheus_client import make_asgi_app, Counter, Histogram
+from slowapi.errors import RateLimitExceeded
 from rknmon.db import get_pool, close_pool
 from rknmon.db_schema import init_schema
 from rknmon.probes.scheduler import start_scheduler, shutdown_scheduler
-from rknmon.api import targets, events, alerts, probes
+from rknmon.api import targets, events, alerts, probes, stats, export
+from rknmon.api.auth import APIKeyMiddleware
+from rknmon.config.settings import settings
+from rknmon.api.deps import limiter
+import json
 
 REQUEST_COUNT = Counter("http_requests_total", "HTTP requests", ["method", "endpoint", "status"])
 REQUEST_DURATION = Histogram("http_request_duration_seconds", "HTTP request duration", ["method", "endpoint"])
+
+BASE_DIR = Path(__file__).resolve().parent.parent.parent
+TEMPLATES_DIR = BASE_DIR / "templates"
+STATIC_DIR = BASE_DIR / "static"
+
+templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -18,11 +32,19 @@ async def lifespan(app: FastAPI):
     shutdown_scheduler()
     await close_pool()
 
-app = FastAPI(title="RKN Blocks Monitoring", version="0.1.0", lifespan=lifespan)
+app = FastAPI(title="RKN Blocks Monitoring", version="1.0.0", lifespan=lifespan)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, lambda req, exc: JSONResponse({"detail": "Rate limit exceeded"}, status_code=429))
+app.add_middleware(APIKeyMiddleware)
+
 app.include_router(targets.router)
 app.include_router(events.router)
 app.include_router(alerts.router)
 app.include_router(probes.router)
+app.include_router(stats.router)
+app.include_router(export.router)
+
+app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
 prom_app = make_asgi_app()
 app.mount("/metrics", prom_app)
@@ -38,4 +60,80 @@ async def health():
 
 @app.get("/")
 async def root():
-    return {"app": "rknmon", "version": "0.1.0"}
+    return {"app": "rknmon", "version": "1.0.0"}
+
+@app.get("/ui/dashboard")
+async def dashboard(request: Request):
+    return templates.TemplateResponse(request, "dashboard.html", {})
+
+@app.get("/ui/target/{target_id}")
+async def target_detail(request: Request, target_id: int):
+    from rknmon.db import fetchrow, fetch
+    target = await fetchrow("SELECT * FROM targets WHERE id = $1", target_id)
+    if not target:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=404, detail="Target not found")
+    probes = await fetch(
+        "SELECT * FROM probes WHERE target_id = $1 ORDER BY checked_at DESC LIMIT 50",
+        target_id,
+    )
+    events = await fetch(
+        "SELECT * FROM events WHERE target_id = $1 ORDER BY created_at DESC LIMIT 50",
+        target_id,
+    )
+    return templates.TemplateResponse(
+        request,
+        "target_detail.html",
+        {
+            "target": dict(target),
+            "probes": [dict(r) for r in probes],
+            "events": [dict(r) for r in events],
+        },
+    )
+
+def _json_default(obj):
+    from datetime import datetime
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    raise TypeError
+
+@app.get("/ui/dashboard_data")
+async def dashboard_data():
+    from rknmon.db import fetch, fetchrow
+    targets = await fetch(
+        "SELECT id, domain, state, category, is_active FROM targets WHERE is_active = true ORDER BY id"
+    )
+    by_state = await fetch(
+        "SELECT state, COUNT(*) AS n FROM targets GROUP BY state"
+    )
+    events_24h = await fetch(
+        """
+        SELECT e.event_type, COUNT(*) AS n
+        FROM events e
+        WHERE e.created_at > now() - interval '24 hours'
+        GROUP BY e.event_type
+        """
+    )
+    daily_events = await fetch(
+        """
+        SELECT DATE(created_at) AS day, event_type, COUNT(*) AS n
+        FROM events
+        WHERE created_at > now() - interval '14 days'
+        GROUP BY DATE(created_at), event_type
+        ORDER BY day
+        """
+    )
+    latest_probes = await fetch(
+        """
+        SELECT DISTINCT ON (target_id) p.*, t.domain
+        FROM probes p JOIN targets t ON t.id = p.target_id
+        ORDER BY target_id, checked_at DESC
+        """
+    )
+    return {
+        "targets": [dict(r) for r in targets],
+        "by_state": {r["state"]: r["n"] for r in by_state},
+        "events_24h": {r["event_type"]: r["n"] for r in events_24h},
+        "daily_events": [dict(r) for r in daily_events],
+        "latest_probes": [dict(r) for r in latest_probes],
+    }

@@ -1,11 +1,14 @@
 from fastapi import APIRouter, HTTPException
+from fastapi import Request
 from rknmon.db import fetchrow, fetch, execute
 from rknmon.models.schemas import Target
+from rknmon.api.deps import limiter
 
 router = APIRouter(prefix="/targets", tags=["targets"])
 
 @router.get("")
-async def list_targets(active_only: bool = False):
+@limiter.limit("100/minute")
+async def list_targets(request: Request, active_only: bool = False):
     if active_only:
         rows = await fetch("SELECT * FROM targets WHERE is_active = true ORDER BY id")
     else:
@@ -13,14 +16,16 @@ async def list_targets(active_only: bool = False):
     return [dict(r) for r in rows]
 
 @router.get("/{target_id}")
-async def get_target(target_id: int):
+@limiter.limit("100/minute")
+async def get_target(request: Request, target_id: int):
     row = await fetchrow("SELECT * FROM targets WHERE id = $1", target_id)
     if not row:
         raise HTTPException(status_code=404, detail="Target not found")
     return dict(row)
 
 @router.post("")
-async def create_target(target: Target):
+@limiter.limit("20/minute")
+async def create_target(request: Request, target: Target):
     row = await fetchrow(
         """
         INSERT INTO targets (url, domain, ip, category, source, is_active)
@@ -38,7 +43,8 @@ async def create_target(target: Target):
     return dict(row)
 
 @router.patch("/{target_id}")
-async def update_target(target_id: int, data: dict):
+@limiter.limit("20/minute")
+async def update_target(request: Request, target_id: int, data: dict):
     # Naive patch: update provided fields
     allowed = {"url", "domain", "ip", "category", "source", "is_active"}
     fields = {k: v for k, v in data.items() if k in allowed}
@@ -55,7 +61,8 @@ async def update_target(target_id: int, data: dict):
     return dict(row)
 
 @router.delete("/{target_id}")
-async def delete_target(target_id: int):
+@limiter.limit("20/minute")
+async def delete_target(request: Request, target_id: int):
     result = await execute("DELETE FROM targets WHERE id = $1", target_id)
     if result == "DELETE 0":
         raise HTTPException(status_code=404, detail="Target not found")

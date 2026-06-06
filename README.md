@@ -1,42 +1,66 @@
-# RKN Blocks Monitoring
+# RKN Blocks Monitoring v1.0.0
 
 Мониторинг блокировок РКН: проверка доступности доменов через HTTP(S) + DNS, обнаружение подмены/блокировки, алерты и дашборд.
 
 ## Быстрый старт (dev)
 
 ```bash
-cd /home/www/projects/rkn-blocks-monitoring
 docker compose up -d db
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-pip install -e .
-DATABASE_URL=postgresql://rknmon:rknmon_dev@localhost:5432/rknmon uvicorn rknmon.api.main:app --reload
+uvicorn rknmon.api.main:app --reload --host 0.0.0.0 --port 8000
+```
+
+## Быстрый старт (prod)
+
+```bash
+cp .env.example .env
+# edit .env
+docker compose -f docker-compose.prod.yml up -d
 ```
 
 ## Компоненты
 
-- `src/rknmon/api/` — FastAPI (REST: targets, events, probes, alerts; health `/health`; Prometheus `/metrics`)
+- `src/rknmon/api/` — FastAPI (REST: targets, events, probes, alerts, stats, export; UI dashboard; health `/health`; Prometheus `/metrics`)
 - `src/rknmon/probes/` — HTTP + DNS пробы, scheduler, classifier, state engine, evaluator
-- `src/rknmon/alerts/` — generic webhook alerting (VPN-safe, без интернет-выхода)
-- `src/rknmon/ingest/` — загрузка списков целей (csv.DictReader, без pandas)
+- `src/rknmon/alerts/` — generic webhook alerting (VPN-safe)
+- `src/rknmon/ingest/` — загрузка списков целей (csv.DictReader)
 - `src/rknmon/models/` — Pydantic схемы
-- `migrations/` — Alembic stub (пока `init_schema`)
-- `tests/` — pytest, 14 tests
+- `templates/` — Jinja2 шаблоны (dashboard, target detail)
+- `migrations/` — Alembic stub
+- `tests/` — pytest, 19 tests
 
 ## REST API эндпоинты
 
-| Path | Method | Описание |
-|------|--------|----------|
-| `/` | GET | App info |
-| `/health` | GET | Liveness + DB connectivity |
-| `/metrics` | GET | Prometheus |
-| `/targets` | GET/POST | Список / создание целей |
-| `/targets/{id}` | GET/PATCH/DELETE | Цель |
-| `/events` | GET | События (state transitions) |
-| `/probes/latest` | GET | Последние пробы |
-| `/probes/statistics` | GET | Статистика проб |
-| `/alerts/webhook` | GET | Статус конфига webhook |
+| Path | Method | Auth | Описание |
+|------|--------|------|----------|
+| `/` | GET | no | App info |
+| `/health` | GET | no | Liveness + DB connectivity |
+| `/metrics` | GET | no | Prometheus |
+| `/ui/dashboard` | GET | no | HTML дашборд |
+| `/ui/target/{id}` | GET | no | Страница цели |
+| `/ui/dashboard_data` | GET | no | JSON для Chart.js дашборда |
+| `/targets` | GET/POST | X-API-Key | Список / создание целей |
+| `/targets/{id}` | GET/PATCH/DELETE | X-API-Key | Цель |
+| `/events` | GET | X-API-Key | События |
+| `/probes/latest` | GET | X-API-Key | Последние пробы |
+| `/probes/statistics` | GET | X-API-Key | Статистика проб |
+| `/alerts/webhook` | GET | X-API-Key | Статус webhook |
+| `/stats` | GET | X-API-Key | Агрегированная статистика |
+| `/export/targets` | GET | X-API-Key | Экспорт (json/csv) |
+| `/export/events` | GET | X-API-Key | Экспорт событий (json/csv) |
+
+## Авторизация
+
+Все API endpoints (кроме `/health`, `/metrics`, `/ui/*`, `/docs`, `/openapi.json`) требуют заголовок:
+```
+X-API-Key: your-key
+```
+
+Настраивается через env `API_KEY`.
+
+## Rate limiting
+
+- slowapi, по IP
+- GET: 100/min, POST/PATCH/DELETE: 20/min, Export: 30/min
 
 ## Алгоритм обнаружения блокировки (rule-based)
 
@@ -55,3 +79,7 @@ DATABASE_URL=postgresql://rknmon:rknmon_dev@localhost:5432/rknmon uvicorn rknmon
 ## Масштаб v1.0
 
 ~100 доменов, интервал 10 мин. Архитектура рассчитана на 200k+ при необходимости (concurrency semaphore, batch INSERT, partitioning designed-in).
+
+## Операции
+
+См. [RUNBOOK.md](RUNBOOK.md) — бэкапы, нагрузочные тесты, troubleshooting.

@@ -1,10 +1,12 @@
-from fastapi import APIRouter
+from fastapi import APIRouter, Request
 from rknmon.db import fetch
+from rknmon.api.deps import limiter
 
 router = APIRouter(prefix="/probes", tags=["probes"])
 
 @router.get("/latest")
-async def list_latest(target_id: int | None = None, limit: int = 100):
+@limiter.limit("100/minute")
+async def list_latest(request: Request, target_id: int | None = None, limit: int = 100):
     if target_id:
         rows = await fetch(
             """
@@ -29,7 +31,8 @@ async def list_latest(target_id: int | None = None, limit: int = 100):
     return [dict(r) for r in rows]
 
 @router.get("/statistics")
-async def probe_stats():
+@limiter.limit("100/minute")
+async def probe_stats(request: Request):
     total = await fetch("SELECT COUNT(*) FROM probes")
     by_type = await fetch(
         "SELECT probe_type, COUNT(*) as count FROM probes GROUP BY probe_type"

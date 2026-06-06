@@ -71,28 +71,28 @@ scripts/        — ingest.py, probe.py, evaluate.py (CLI wrappers)
 
 **Goal:** Deliver web dashboard and expand API surface for operators.
 
+**Tech stack (simplified):**
+- Jinja2 templates (plain HTML, no HTMX/Alpine.js)
+- Minimal inline JS for auto-refresh (`setInterval` + `fetch` → replace `innerHTML`)
+- Chart.js via CDN (single `<script>` tag, one chart type)
+- Inline CSS (no build step, VPN-safe)
+
 | # | Task | Deliverable | Est. |
 |---|------|-------------|------|
-| 4.1 | Stats endpoint | `GET /stats` — aggregate counts (targets, blocked, suspected, probes 24h, events 24h) | 30 min |
-| 4.2 | Export endpoints | `GET /export/targets?format=json|csv`, `GET /export/events?format=json|csv&hours=24` | 45 min |
-| 4.3 | Dashboard UI | HTMX + Alpine.js + Chart.js dark-themed dashboard: stats cards, target list with search/filter, events table, auto-refresh every 30s | 2h |
-| 4.4 | Target detail page | `/ui/target/{id}` — probe history + event timeline for single target | 30 min |
-
-**Architecture Decision:**
-- Dashboard served by same FastAPI process via Jinja2 templates.
-- HTMX for server-rendered interactivity (no SPA build step, VPN-friendly).
-- Alpine.js for lightweight client state (dropdowns, tabs).
-- Chart.js for trends (blocked % over time, probe latency distribution).
-- CDN links for JS libs (no npm/build); fallback to vendoring if VPN blocks CDNs.
+|| 4.1 | Stats endpoint | `GET /stats` — aggregate counts | 30 min |
+|| 4.2 | Export endpoints | `GET /export/targets?format=json|csv`, `GET /export/events?format=json|csv` | 1h |
+|| 4.3 | Dashboard UI | Single-page dashboard: stats cards, target list, events table, auto-refresh 30s | **3h** |
+|| 4.4 | Target detail page | `/ui/target/{id}` — probe history + event timeline | **1.5h** |
 
 **New Files:**
 ```
 src/rknmon/api/stats.py
 src/rknmon/api/export.py
-src/rknmon/ui/dashboard.py
+src/rknmon/ui/router.py
 src/rknmon/ui/templates/base.html
 src/rknmon/ui/templates/dashboard.html
 src/rknmon/ui/templates/target_detail.html
+src/rknmon/ui/static/style.css
 tests/test_stats.py
 tests/test_export.py
 tests/test_ui.py
@@ -305,12 +305,12 @@ GET  /ui/target/{id}           → target detail HTML page
 
 | Milestone | Tasks | Est. Effort |
 |-----------|-------|-------------|
-| M4 Dashboard & API | 4.1–4.4 | ~3.5h |
-| M5 Hardening & Ops | 5.1–5.4 | ~2.5h |
-| M6 Review & Stabilise | 6.1–6.4 | ~3h |
-| **M4–M6 Total** | 11 tasks | **~9h** (1 dev, compact) |
+|| M4 Dashboard & API | 4.1–4.4 | **~8h** |
+|| M5 Hardening & Ops | 5.1–5.4 | **~5h** |
+|| M6 Review & Stabilise | 6.1–6.4 | **~6h** |
+|| **M4–M6 Total** | 11 tasks | **~19h** |
 
-**Note:** Estimates assume direct implementation by developer familiar with codebase. Review and iteration not included.
+**Note:** Estimates account for integration debugging, test writing, and one retry cycle. HTMX/Alpine.js replaced with plain Jinja2 + minimal inline JS to reduce complexity.
 
 ### Risks & Mitigations
 
