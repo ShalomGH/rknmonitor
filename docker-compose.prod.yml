@@ -28,7 +28,7 @@ services:
       PROBE_INTERVAL_MINUTES: ${PROBE_INTERVAL_MINUTES:-10}
       EVENT_RETENTION_DAYS: ${EVENT_RETENTION_DAYS:-365}
     ports:
-      - "127.0.0.1:8000:8000"
+      - "0.0.0.0:8000:8000"
     depends_on:
       db:
         condition: service_healthy
