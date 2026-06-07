@@ -29,7 +29,7 @@ async def lifespan(app: FastAPI):
     await init_schema()
     start_scheduler()
     yield
-    shutdown_scheduler()
+    await shutdown_scheduler()
     await close_pool()
 
 app = FastAPI(title="RKN Blocks Monitoring", version="1.0.0", lifespan=lifespan)
