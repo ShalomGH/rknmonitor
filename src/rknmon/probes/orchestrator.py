@@ -7,6 +7,7 @@ from rknmon.config.settings import settings
 from rknmon.probes.http_probe import probe_http
 from rknmon.probes.dns_probe import probe_dns
 from rknmon.db import execute
+from rknmon.custom_metrics import record_probe_latency, set_active_targets
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,10 @@ async def run_probe_for_target(target: dict, semaphore: asyncio.Semaphore) -> No
             target_id, "http", http_result.get("status_code"), http_result.get("response_time_ms"),
             http_result.get("body_hash"), http_result.get("error"), http_result
         )
-        logger.debug(f"HTTP probe {domain}: {http_result.get('status_code')} in {http_result.get('response_time_ms')}ms")
+        rt = http_result.get("response_time_ms")
+        if rt is not None:
+            record_probe_latency(target_id, domain, "http", rt)
+        logger.debug(f"HTTP probe {domain}: {http_result.get('status_code')} in {rt}ms")
 
         # DNS probe
         dns_result = await probe_dns(domain)
@@ -44,9 +48,13 @@ async def run_probe_for_target(target: dict, semaphore: asyncio.Semaphore) -> No
             """,
             target_id, "dns", resolver_err, "multi", dns_result
         )
+        dns_rt = dns_result.get("response_time_ms")
+        if dns_rt is not None:
+            record_probe_latency(target_id, domain, "dns", dns_rt)
         logger.debug(f"DNS probe {domain}: tampered={dns_result.get('tampered')}")
 
 async def run_all(targets: List[dict]) -> None:
+    set_active_targets(len(targets))
     semaphore = asyncio.Semaphore(CONCURRENCY)
     jitter = settings.probe_jitter_seconds
     # add jitter so we don't thundering herd

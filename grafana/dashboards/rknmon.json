@@ -1,0 +1,105 @@
+{
+  "uid": "rknmon-main",
+  "title": "RKN Blocks Monitoring",
+  "tags": ["rknmon", "monitoring"],
+  "timezone": "UTC",
+  "schemaVersion": 40,
+  "refresh": "30s",
+  "time": {"from": "now-6h", "to": "now"},
+  "templating": {"list": []},
+  "annotations": {"list": []},
+  "panels": [
+    {
+      "id": 1,
+      "title": "Active Targets",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "rknmon_active_targets",
+          "legendFormat": "Active",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0}
+    },
+    {
+      "id": 2,
+      "title": "Targets by State",
+      "type": "bargauge",
+      "targets": [
+        {
+          "expr": "rknmon_targets_by_state",
+          "legendFormat": "{{state}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 8, "x": 4, "y": 0},
+      "options": {"orientation": "horizontal", "displayMode": "gradient"}
+    },
+    {
+      "id": 3,
+      "title": "Events (24h rate)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(rknmon_events_total[1h])",
+          "legendFormat": "{{event_type}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+    },
+    {
+      "id": 4,
+      "title": "HTTP Probe Latency (ms)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rknmon_probe_latest_response_ms{probe_type=\"http\"}",
+          "legendFormat": "{{domain}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+    },
+    {
+      "id": 5,
+      "title": "DNS Probe Latency (ms)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rknmon_probe_latest_response_ms{probe_type=\"dns\"}",
+          "legendFormat": "{{domain}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+    },
+    {
+      "id": 6,
+      "title": "HTTP Request Rate (req/s)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rate(http_requests_total[1m])",
+          "legendFormat": "{{method}} {{endpoint}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+    },
+    {
+      "id": 7,
+      "title": "HTTP Request Duration (p95)",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "{{method}} {{endpoint}}",
+          "refId": "A"
+        }
+      ],
+      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+    }
+  ]
+}

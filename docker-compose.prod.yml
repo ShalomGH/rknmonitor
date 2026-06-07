@@ -16,13 +16,15 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - rknmon
 
   app:
     image: rknmon:1.0.0
     container_name: rknmon_app
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://${POSTGRES_USER:-rknmon}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-rknmon}
+      DATABASE_URL: postgresql://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@db:5432/$${POSTGRES_DB:-rknmon}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       API_KEY: ${API_KEY:-change-me-in-production}
       PROBE_INTERVAL_MINUTES: ${PROBE_INTERVAL_MINUTES:-10}
@@ -38,6 +40,53 @@ services:
       options:
         max-size: "10m"
         max-file: "3"
+    networks:
+      - rknmon
+
+  prometheus:
+    image: prom/prometheus:v3.2.1
+    container_name: rknmon_prometheus
+    restart: unless-stopped
+    volumes:
+      - ./prometheus:/etc/prometheus:ro
+      - prometheus_data:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=30d'
+      - '--web.enable-lifecycle'
+    networks:
+      - rknmon
+    # Не выставляем порты наружу — доступ только через reverse proxy / VPN
+    # ports:
+    #   - "127.0.0.1:9090:9090"
+
+  grafana:
+    image: grafana/grafana:11.6.0
+    container_name: rknmon_grafana
+    restart: unless-stopped
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_SECURITY_ALLOW_EMBEDDING: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana_data:/var/lib/grafana
+    ports:
+      - "0.0.0.0:3000:3000"
+    depends_on:
+      - prometheus
+    networks:
+      - rknmon
 
 volumes:
   pgdata:
+  prometheus_data:
+  grafana_data:
+
+networks:
+  rknmon:
+    driver: bridge

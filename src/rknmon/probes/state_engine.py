@@ -2,8 +2,14 @@ from __future__ import annotations
 import logging
 from rknmon.db import fetchrow, execute
 from rknmon.probes.classifier import State
+from rknmon.custom_metrics import record_event, update_target_state_metrics
 
 logger = logging.getLogger(__name__)
+
+async def _update_state_counts():
+    from rknmon.db import fetch
+    rows = await fetch("SELECT state, COUNT(*) AS n FROM targets GROUP BY state")
+    update_target_state_metrics({r["state"]: r["n"] for r in rows})
 
 async def update_target_state(
     target_id: int,
@@ -43,4 +49,6 @@ async def update_target_state(
         target_id, event_type, old_state, new_state, details,
     )
     logger.info(f"Target {target_id}: {old_state} -> {new_state} ({event_type})")
+    record_event(event_type)
+    await _update_state_counts()
     return dict(event) if event else None
