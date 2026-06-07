@@ -11,8 +11,13 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY src/ ./src/
+COPY static/ ./static/
+COPY templates/ ./templates/
+COPY scripts/ ./scripts/
 COPY migrations/ ./migrations/
 COPY alembic.ini .
+COPY README.md .
+COPY RUNBOOK.md .
 
 ENV PYTHONPATH=/app/src
 
