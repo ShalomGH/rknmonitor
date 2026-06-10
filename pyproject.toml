@@ -23,6 +23,7 @@ dependencies = [
 
 [project.scripts]
 rknmon-agent = "rknmon.agent.cli:main"
+rknmon-admin = "rknmon.admin.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

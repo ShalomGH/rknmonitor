@@ -23,7 +23,71 @@ docker compose -f docker-compose.prod.yml up -d
 
 Агент работает без VPN и без входящих портов: только outbound HTTPS в центральный API.
 
-### Raspberry Pi quick deploy
+### Один инсталл-токен = одна команда (для друзей)
+
+Центральный админ минтит одноразовый токен:
+
+```bash
+rknmon-admin agent-invite --name friend-msk --location msk --provider mts
+# → печатает готовую команду, которую можно скопировать в чат
+```
+
+Друг запускает на своей машине (RPi, VPS, домашний сервер) одну команду:
+
+```bash
+curl -fsSL https://mon.example.com/install-agent.sh | sudo bash -s -- \
+    --central https://mon.example.com \
+    --token ВОТ_ЭТОТ_ИНВАЙТ
+```
+
+Скрипт сам:
+1. поставит Docker, если его ещё нет
+2. создаст `/opt/rknmon-agent`
+3. скачает `docker-compose.agent.public.yml` (без `build:` — тянет `ghcr.io/yourname/rknmon-agent:stable`)
+4. обменяет инвайт на перманентный `NODE_API_KEY` через `POST /agent/bootstrap`
+5. запишет `chmod 600 .env.agent` и `.env.xray`
+6. поднимет `rknmon-xray` + `rknmon-agent`
+7. покажет первые логи
+
+Другу **не нужно** клонировать репо, копировать `.env.agent.example`, генерировать API key, открывать порты или знать что-то про твой сервер, кроме `--central` и `--token`.
+
+### Mint/Revoke инвайтов (админ API)
+
+```bash
+# Базовый invite только под DPI
+rknmon-admin agent-invite --name friend-msk --location msk --provider mts
+
+# DPI + Xray с подписками, вшитыми в invite
+rknmon-admin agent-invite --name friend-spb --location spb --provider rostelecom \
+    --modes dpi,xray \
+    --xray-sub "https://sub.example/abcdef,https://sub.example/zyxwvu" \
+    --xray-name "sub-one,sub-two"
+
+# Срок 24 часа, до 3 использований (например, тестово)
+rknmon-admin agent-invite --name test-msk --expires-in-hours 24 --max-uses 3
+
+# Показать активные инвайты
+rknmon-admin agent-list-invites
+
+# Отозвать неиспользованный инвайт
+rknmon-admin agent-revoke-invite 7
+```
+
+Прямые API-вызовы (за nginx с admin-IP whitelist):
+
+```bash
+curl -X POST https://mon.example.com/admin/agents/invites \
+    -H "X-API-Key: $API_KEY" \
+    -H "Content-Type: application/json" \
+    -d '{"name":"friend-msk","location":"msk","provider":"mts","expires_in_hours":168}'
+
+curl -X DELETE https://mon.example.com/admin/agents/invites/7 \
+    -H "X-API-Key: $API_KEY"
+```
+
+### Raspberry Pi quick deploy (legacy, ручная установка)
+
+Старый путь через `git clone` всё ещё работает, если у тебя есть прямой SSH-доступ к другу и ты готов настраивать `.env.agent` руками.
 
 ```bash
 sudo apt update
@@ -39,12 +103,15 @@ vim .env.agent
 docker compose -f docker-compose.agent.yml up -d --build
 ```
 
-Поток запросов:
-- `POST /agent/register`
-- `POST /agent/heartbeat`
-- `GET /agent/targets`
-- `POST /agent/results`
+### Поток запросов
+
+- `POST /agent/bootstrap` — обмен одноразового токена на перманентный `NODE_API_KEY`
+- `POST /agent/register` — heartbeat-style регистрация/обновление node (или legacy прямой путь под `RKNMON_ALLOW_DIRECT_REGISTRATION=true`)
+- `POST /agent/heartbeat` — keepalive
+- `GET  /agent/targets` — список целей
+- `POST /agent/results` — пробы
 - `POST /agent/xray-results` — если включён `XRAY_ENABLED=true`
+- `POST /agent/dpi-results` — если включён `DPI_ENABLED=true`
 
 ### Xray subscription monitoring
 

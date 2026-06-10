@@ -38,13 +38,100 @@ async def _get_probe_node(request: Request) -> dict:
     return dict(row)
 
 
+def _is_self_registration_via_invite() -> bool:
+    """Whether /agent/register is allowed to register via X-Node-API-Key directly.
+
+    Default is False for public installs: a stray API key in a Telegram chat
+    could register an attacker-controlled node. We only keep the
+    self-registration fallback for trusted/lan deployments when the
+    RKNMON_ALLOW_DIRECT_REGISTRATION env flag is set.
+    """
+    import os
+    return os.getenv("RKNMON_ALLOW_DIRECT_REGISTRATION", "false").lower() in {
+        "1",
+        "true",
+        "yes",
+    }
+
+
 @router.post("/register")
 async def agent_register(request: Request, payload: AgentRegisterIn):
     api_key = request.headers.get("X-Node-API-Key")
     if not api_key:
         raise HTTPException(status_code=403, detail="Forbidden: missing node API key")
 
-    await fetchrow("SELECT id FROM probe_nodes WHERE api_key = $1", api_key)
+    # If the client was bootstrapped via /agent/bootstrap, the API key already
+    # exists in the DB. Just refresh last_seen metadata.
+    existing = await fetchrow(
+        "SELECT id, name, is_active FROM probe_nodes WHERE api_key = $1",
+        api_key,
+    )
+    if existing:
+        await execute(
+            """
+            UPDATE probe_nodes
+            SET last_seen_at = now(),
+                last_ip = COALESCE($2, last_ip),
+                agent_version = COALESCE($3, agent_version),
+                location = COALESCE($4, location),
+                provider = COALESCE($5, provider),
+                is_active = true
+            WHERE id = $1
+            """,
+            existing["id"],
+            payload.public_ip,
+            payload.agent_version,
+            payload.location,
+            payload.provider,
+        )
+        return {
+            "probe_node_id": existing["id"],
+            "name": existing["name"],
+            "is_active": existing["is_active"],
+            "poll_interval_seconds": _poll_interval_seconds(),
+            "registration": "existing",
+        }
+
+    # No pre-existing node for this key. Two paths:
+    # 1. Bootstrap via invite token: client supplies bootstrap_token.
+    if payload.bootstrap_token:
+        from rknmon.api.agent_invites import bootstrap_agent
+
+        try:
+            bootstrap_out, _ = await bootstrap_agent(
+                token=payload.bootstrap_token,
+                name=payload.name,
+                location=payload.location,
+                provider=payload.provider,
+                public_ip=payload.public_ip,
+                agent_version=payload.agent_version,
+            )
+        except PermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc))
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc))
+
+        # The client just sent a key the central will mint *after* this call.
+        # Tell the client to retry the heartbeat path with the new key instead.
+        return {
+            "probe_node_id": None,
+            "name": bootstrap_out.agent_name,
+            "is_active": True,
+            "poll_interval_seconds": _poll_interval_seconds(),
+            "registration": "bootstrap_pending",
+            "bootstrap": bootstrap_out.model_dump(),
+        }
+
+    # 2. Legacy / opt-in direct registration: only when explicitly enabled.
+    if not _is_self_registration_via_invite():
+        raise HTTPException(
+            status_code=403,
+            detail=(
+                "Forbidden: this central requires invite-based registration. "
+                "POST /agent/bootstrap with a one-time token to enroll."
+            ),
+        )
+
     await execute(
         """
         INSERT INTO probe_nodes (name, api_key, location, provider, last_seen_at, last_ip, agent_version, is_active)
@@ -73,6 +160,7 @@ async def agent_register(request: Request, payload: AgentRegisterIn):
         "name": row["name"],
         "is_active": row["is_active"],
         "poll_interval_seconds": _poll_interval_seconds(),
+        "registration": "legacy",
     }
 
 

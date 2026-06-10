@@ -87,6 +87,66 @@ class AgentRegisterIn(BaseModel):
     provider: Optional[str] = None
     agent_version: Optional[str] = None
     public_ip: Optional[str] = None
+    bootstrap_token: Optional[str] = None
+    bootstrap_nonce: Optional[str] = None
+
+
+class AgentBootstrapIn(BaseModel):
+    token: str
+    name: str
+    location: Optional[str] = None
+    provider: Optional[str] = None
+    public_ip: Optional[str] = None
+    agent_version: Optional[str] = None
+    nonce: Optional[str] = None
+    ssh_public_key: Optional[str] = None
+
+
+class AgentBootstrapOut(BaseModel):
+    central_api_url: str
+    node_api_key: str
+    agent_name: str
+    agent_location: Optional[str] = None
+    agent_provider: Optional[str] = None
+    probe_interval_seconds: int
+    modes: list[str]
+    xray_subscription_urls: list[str]
+    xray_subscription_names: list[str]
+    xray_test_url: str
+    xray_socks_start_port: int
+    install_docker_compose_url: str
+
+
+class AgentInviteCreateIn(BaseModel):
+    name: str
+    location: Optional[str] = None
+    provider: Optional[str] = None
+    modes: list[str] = ["dpi"]
+    xray_subscription_urls: list[str] = []
+    xray_subscription_names: list[str] = []
+    xray_test_url: Optional[str] = "https://cp.cloudflare.com/"
+    expires_in_hours: int = 168
+    max_uses: int = 1
+    note: Optional[str] = None
+    created_by: Optional[str] = None
+
+
+class AgentInviteOut(BaseModel):
+    id: int
+    token: str
+    name: str
+    location: Optional[str] = None
+    provider: Optional[str] = None
+    modes: list[str]
+    xray_subscription_urls: list[str]
+    xray_subscription_names: list[str]
+    xray_test_url: Optional[str] = None
+    expires_at: datetime
+    max_uses: int
+    uses: int
+    note: Optional[str] = None
+    created_by: Optional[str] = None
+    created_at: datetime
 
 
 class AgentHeartbeatIn(BaseModel):

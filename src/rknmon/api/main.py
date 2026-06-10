@@ -11,6 +11,8 @@ from rknmon.db import get_pool, close_pool, fetch
 from rknmon.db_schema import init_schema
 from rknmon.probes.scheduler import start_scheduler, shutdown_scheduler
 from rknmon.api import targets, events, alerts, probes, stats, export, agents
+from rknmon.api.agent_invites_routes import public_router as agent_bootstrap_router
+from rknmon.api.agent_invites_routes import router as admin_agents_router
 from rknmon.api.auth import APIKeyMiddleware
 from rknmon.api.deps import limiter
 
@@ -57,6 +59,8 @@ app.include_router(probes.router)
 app.include_router(stats.router)
 app.include_router(export.router)
 app.include_router(agents.router)
+app.include_router(admin_agents_router)
+app.include_router(agent_bootstrap_router)
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 

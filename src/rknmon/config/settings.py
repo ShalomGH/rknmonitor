@@ -24,6 +24,11 @@ class Settings(BaseSettings):
     api_key: str = "dev-key-change-me"
     rate_limit: str = "100/minute"
 
+    public_base_url: str = "https://monitor.example.com"
+    agent_install_docker_compose_url: str = ""
+    xray_socks_start_port: int = 11001
+    probe_interval_seconds: int = 300
+
     model_config = {"env_file": ".env", "extra": "ignore"}
 
 settings = Settings()

@@ -1,4 +1,5 @@
 from fastapi.testclient import TestClient
+import os
 from unittest.mock import AsyncMock, patch
 
 from rknmon.api.main import app
@@ -64,6 +65,7 @@ def test_agent_results_ingest_with_node_api_key(mock_fetchrow, mock_execute, moc
     assert first_call_args[2] == 7
 
 
+@patch.dict(os.environ, {"RKNMON_ALLOW_DIRECT_REGISTRATION": "true"})
 @patch("rknmon.api.agents.execute", new_callable=AsyncMock)
 @patch("rknmon.api.agents.fetchrow")
 def test_agent_register_upserts_probe_node_and_returns_identity(mock_fetchrow, mock_execute):
@@ -91,12 +93,10 @@ def test_agent_register_upserts_probe_node_and_returns_identity(mock_fetchrow, m
     response = client.post("/agent/register", headers={"X-Node-API-Key": "node-secret"}, json=payload)
 
     assert response.status_code == 200
-    assert response.json() == {
-        "probe_node_id": 7,
-        "name": "rpi-home",
-        "is_active": True,
-        "poll_interval_seconds": 300,
-    }
+    body = response.json()
+    assert body["probe_node_id"] == 7
+    assert body["name"] == "rpi-home"
+    assert body["registration"] == "legacy"
     assert mock_execute.await_count == 1
     assert "INSERT INTO probe_nodes" in mock_execute.await_args.args[0]
 

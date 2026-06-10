@@ -137,6 +137,39 @@ CREATE INDEX IF NOT EXISTS idx_dpi_probe_results_node_checked ON dpi_probe_resul
 CREATE INDEX IF NOT EXISTS idx_dpi_probe_results_checker_checked ON dpi_probe_results(checker, checked_at DESC);
 CREATE INDEX IF NOT EXISTS idx_dpi_probe_results_target_checked ON dpi_probe_results(target, checked_at DESC);
 CREATE INDEX IF NOT EXISTS idx_dpi_probe_results_ok ON dpi_probe_results(ok);
+
+CREATE TABLE IF NOT EXISTS agent_invites (
+    id SERIAL PRIMARY KEY,
+    token TEXT NOT NULL,
+    name TEXT NOT NULL,
+    location TEXT,
+    provider TEXT,
+    modes TEXT[] NOT NULL DEFAULT ARRAY['dpi']::TEXT[],
+    xray_subscription_urls TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    xray_subscription_names TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[],
+    xray_test_url TEXT DEFAULT 'https://cp.cloudflare.com/',
+    expires_at TIMESTAMPTZ NOT NULL,
+    consumed_at TIMESTAMPTZ,
+    consumed_by_node_id INTEGER REFERENCES probe_nodes(id) ON DELETE SET NULL,
+    max_uses INTEGER NOT NULL DEFAULT 1,
+    uses INTEGER NOT NULL DEFAULT 0,
+    note TEXT,
+    created_by TEXT,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+    CONSTRAINT uq_agent_invite_token UNIQUE (token)
+);
+
+CREATE INDEX IF NOT EXISTS idx_agent_invites_token ON agent_invites(token);
+CREATE INDEX IF NOT EXISTS idx_agent_invites_expires_at ON agent_invites(expires_at);
+
+ALTER TABLE agent_invites ADD COLUMN IF NOT EXISTS modes TEXT[] NOT NULL DEFAULT ARRAY['dpi']::TEXT[];
+ALTER TABLE agent_invites ADD COLUMN IF NOT EXISTS xray_subscription_urls TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+ALTER TABLE agent_invites ADD COLUMN IF NOT EXISTS xray_subscription_names TEXT[] NOT NULL DEFAULT ARRAY[]::TEXT[];
+ALTER TABLE agent_invites ADD COLUMN IF NOT EXISTS xray_test_url TEXT DEFAULT 'https://cp.cloudflare.com/';
+ALTER TABLE agent_invites ADD COLUMN IF NOT EXISTS max_uses INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE agent_invites ADD COLUMN IF NOT EXISTS uses INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE agent_invites ADD COLUMN IF NOT EXISTS note TEXT;
+ALTER TABLE agent_invites ADD COLUMN IF NOT EXISTS created_by TEXT;
 """
 
 async def init_schema() -> None:
