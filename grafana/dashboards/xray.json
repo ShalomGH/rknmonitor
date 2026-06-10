@@ -1,0 +1,799 @@
+{
+  "uid": "rknmon-xray",
+  "title": "RKN Xray Profiles",
+  "tags": [
+    "rknmon",
+    "xray",
+    "monitoring"
+  ],
+  "timezone": "Asia/Omsk",
+  "schemaVersion": 40,
+  "refresh": "30s",
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": [
+      {
+        "name": "agent",
+        "type": "query",
+        "label": "Agent",
+        "datasource": {
+          "type": "postgres",
+          "uid": "grafana-postgres"
+        },
+        "query": "SELECT name FROM probe_nodes ORDER BY name",
+        "definition": "SELECT name FROM probe_nodes ORDER BY name",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "subscription",
+        "type": "query",
+        "label": "Subscription",
+        "datasource": {
+          "type": "postgres",
+          "uid": "grafana-postgres"
+        },
+        "query": "SELECT DISTINCT COALESCE(subscription_name, 'default') FROM xray_probe_results ORDER BY 1",
+        "definition": "SELECT DISTINCT COALESCE(subscription_name, 'default') FROM xray_probe_results ORDER BY 1",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      }
+    ]
+  },
+  "annotations": {
+    "list": []
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Profiles OK",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(rknmon_xray_profile_status{agent=~\"$agent\",subscription=~\"$subscription\"})",
+          "legendFormat": "OK",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          }
+        }
+      ],
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 2,
+      "title": "Profiles FAILED",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "count(rknmon_xray_profile_status{agent=~\"$agent\",subscription=~\"$subscription\"}) - sum(rknmon_xray_profile_status{agent=~\"$agent\",subscription=~\"$subscription\"})",
+          "legendFormat": "FAILED",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          }
+        }
+      ],
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 4,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 3,
+      "title": "Success %",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "100 * sum(rknmon_xray_profile_status{agent=~\"$agent\",subscription=~\"$subscription\"}) / count(rknmon_xray_profile_status{agent=~\"$agent\",subscription=~\"$subscription\"})",
+          "legendFormat": "success",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          }
+        }
+      ],
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 8,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 80
+              },
+              {
+                "color": "green",
+                "value": 95
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 4,
+      "title": "Avg latency",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "avg(rknmon_xray_profile_latency_ms{agent=~\"$agent\",subscription=~\"$subscription\"})",
+          "legendFormat": "avg",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          }
+        }
+      ],
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 12,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "decimals": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 800
+              },
+              {
+                "color": "red",
+                "value": 1500
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 5,
+      "title": "Known profiles",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "count(rknmon_xray_profile_status{agent=~\"$agent\",subscription=~\"$subscription\"})",
+          "legendFormat": "profiles",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          }
+        }
+      ],
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 16,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short"
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 6,
+      "title": "Errors/s",
+      "type": "stat",
+      "targets": [
+        {
+          "expr": "sum(rate(rknmon_xray_profile_errors_total{agent=~\"$agent\",subscription=~\"$subscription\"}[$__rate_interval]))",
+          "legendFormat": "errors/s",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          }
+        }
+      ],
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 20,
+        "y": 0
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "decimals": 3,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.001
+              }
+            ]
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 7,
+      "title": "Status by profile",
+      "type": "state-timeline",
+      "targets": [
+        {
+          "expr": "rknmon_xray_profile_status{agent=~\"$agent\",subscription=~\"$subscription\"}",
+          "legendFormat": "{{profile}} / {{transport}}",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          }
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "options": {
+        "mergeValues": false,
+        "showValue": "auto",
+        "alignValue": "center",
+        "rowHeight": 0.9,
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "FAILED",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "OK",
+                  "color": "green"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "custom": {
+            "fillOpacity": 70,
+            "lineWidth": 0,
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 8,
+      "title": "Latency by profile",
+      "type": "timeseries",
+      "targets": [
+        {
+          "expr": "rknmon_xray_profile_latency_ms{agent=~\"$agent\",subscription=~\"$subscription\"}",
+          "legendFormat": "{{profile}} / {{transport}}",
+          "refId": "A",
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          }
+        }
+      ],
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      },
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "options": {
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "calcs": [
+            "lastNotNull",
+            "mean"
+          ]
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "linear",
+            "lineWidth": 2,
+            "fillOpacity": 8,
+            "showPoints": "never",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 9,
+      "title": "Latest profile state",
+      "type": "table",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "grafana-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH latest AS (\n  SELECT DISTINCT ON (x.probe_node_id, COALESCE(x.subscription_name, 'default'), x.profile_id)\n    pn.name AS agent,\n    x.profile_name AS profile,\n    COALESCE(x.subscription_name, 'default') AS subscription,\n    x.protocol,\n    COALESCE(x.transport, '') AS transport,\n    x.security,\n    COALESCE(x.fingerprint, '') AS fingerprint,\n    x.server_host || ':' || x.server_port AS server,\n    x.socks_port,\n    CASE WHEN x.ok THEN 'OK' ELSE 'FAILED' END AS status,\n    round(x.latency_ms::numeric, 1) AS latency_ms,\n    x.http_status,\n    COALESCE(x.error_type, '') AS error_type,\n    left(COALESCE(x.error, ''), 180) AS error,\n    x.checked_at AS last_check\n  FROM xray_probe_results x\n  JOIN probe_nodes pn ON pn.id = x.probe_node_id\n  WHERE pn.name IN (${agent:sqlstring})\n    AND COALESCE(x.subscription_name, 'default') IN (${subscription:sqlstring})\n  ORDER BY x.probe_node_id, COALESCE(x.subscription_name, 'default'), x.profile_id, x.checked_at DESC\n)\nSELECT * FROM latest\nORDER BY status DESC, transport, profile;"
+        }
+      ],
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "grafana-postgres"
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "latency_ms"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "ms"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 10,
+      "title": "Success by transport",
+      "type": "table",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "grafana-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "WITH latest AS (\n  SELECT DISTINCT ON (x.probe_node_id, COALESCE(x.subscription_name, 'default'), x.profile_id)\n    COALESCE(x.transport, 'unknown') AS transport,\n    x.ok\n  FROM xray_probe_results x\n  JOIN probe_nodes pn ON pn.id = x.probe_node_id\n  WHERE pn.name IN (${agent:sqlstring})\n    AND COALESCE(x.subscription_name, 'default') IN (${subscription:sqlstring})\n  ORDER BY x.probe_node_id, COALESCE(x.subscription_name, 'default'), x.profile_id, x.checked_at DESC\n)\nSELECT\n  transport,\n  count(*) AS total,\n  count(*) FILTER (WHERE ok) AS ok,\n  count(*) FILTER (WHERE NOT ok) AS failed,\n  round(100.0 * count(*) FILTER (WHERE ok) / NULLIF(count(*), 0), 1) AS success_pct\nFROM latest\nGROUP BY transport\nORDER BY transport;"
+        }
+      ],
+      "gridPos": {
+        "h": 7,
+        "w": 8,
+        "x": 0,
+        "y": 22
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "grafana-postgres"
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "success_pct"
+            },
+            "properties": [
+              {
+                "id": "unit",
+                "value": "percent"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "id": 11,
+      "title": "Status history",
+      "type": "timeseries",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "grafana-postgres"
+          },
+          "format": "time_series",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  x.checked_at AS \"time\",\n  COALESCE(x.subscription_name, 'default') || ' / ' || x.profile_name || ' / ' || COALESCE(x.transport, '') AS metric,\n  CASE WHEN x.ok THEN 1 ELSE 0 END AS value\nFROM xray_probe_results x\nJOIN probe_nodes pn ON pn.id = x.probe_node_id\nWHERE pn.name IN (${agent:sqlstring})\n  AND COALESCE(x.subscription_name, 'default') IN (${subscription:sqlstring})\n  AND $__timeFilter(x.checked_at)\nORDER BY x.checked_at;"
+        }
+      ],
+      "gridPos": {
+        "h": 7,
+        "w": 16,
+        "x": 8,
+        "y": 22
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "grafana-postgres"
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "FAILED",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "OK",
+                  "color": "green"
+                }
+              }
+            }
+          ],
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 2,
+            "fillOpacity": 12,
+            "showPoints": "auto",
+            "spanNulls": false
+          }
+        },
+        "overrides": []
+      }
+    },
+    {
+      "id": 12,
+      "title": "Recent errors",
+      "type": "table",
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "grafana-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  x.checked_at AS time,\n  pn.name AS agent,\n  x.profile_name AS profile,\n  COALESCE(x.subscription_name, 'default') AS subscription,\n  COALESCE(x.transport, '') AS transport,\n  x.server_host || ':' || x.server_port AS server,\n  COALESCE(x.error_type, '') AS error_type,\n  left(COALESCE(x.error, ''), 220) AS error\nFROM xray_probe_results x\nJOIN probe_nodes pn ON pn.id = x.probe_node_id\nWHERE NOT x.ok\n  AND pn.name IN (${agent:sqlstring})\n  AND COALESCE(x.subscription_name, 'default') IN (${subscription:sqlstring})\n  AND $__timeFilter(x.checked_at)\nORDER BY x.checked_at DESC\nLIMIT 100;"
+        }
+      ],
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 29
+      },
+      "datasource": {
+        "type": "postgres",
+        "uid": "grafana-postgres"
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": []
+      }
+    }
+  ]
+}

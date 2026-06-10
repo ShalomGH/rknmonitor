@@ -5,6 +5,26 @@ from rknmon.db import get_pool
 logger = logging.getLogger(__name__)
 
 SCHEMA_SQL = """
+CREATE TABLE IF NOT EXISTS probe_nodes (
+    id SERIAL PRIMARY KEY,
+    name TEXT NOT NULL,
+    location TEXT,
+    provider TEXT,
+    api_key TEXT NOT NULL,
+    last_seen_at TIMESTAMPTZ,
+    last_ip TEXT,
+    agent_version TEXT,
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    CONSTRAINT uq_probe_node_name UNIQUE (name),
+    CONSTRAINT uq_probe_node_api_key UNIQUE (api_key)
+);
+
+ALTER TABLE probe_nodes ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ;
+ALTER TABLE probe_nodes ADD COLUMN IF NOT EXISTS last_ip TEXT;
+ALTER TABLE probe_nodes ADD COLUMN IF NOT EXISTS agent_version TEXT;
+
 CREATE TABLE IF NOT EXISTS targets (
     id SERIAL PRIMARY KEY,
     url TEXT NOT NULL,
@@ -22,6 +42,7 @@ CREATE TABLE IF NOT EXISTS targets (
 CREATE TABLE IF NOT EXISTS probes (
     id SERIAL PRIMARY KEY,
     target_id INTEGER REFERENCES targets(id) ON DELETE CASCADE,
+    probe_node_id INTEGER REFERENCES probe_nodes(id) ON DELETE CASCADE,
     probe_type VARCHAR(10) NOT NULL,
     status_code INTEGER,
     response_time_ms INTEGER,
@@ -32,8 +53,27 @@ CREATE TABLE IF NOT EXISTS probes (
     checked_at TIMESTAMPTZ DEFAULT now()
 );
 
+ALTER TABLE probes ADD COLUMN IF NOT EXISTS probe_node_id INTEGER REFERENCES probe_nodes(id) ON DELETE CASCADE;
+
 CREATE INDEX IF NOT EXISTS idx_probes_target_id ON probes(target_id);
+CREATE INDEX IF NOT EXISTS idx_probes_probe_node_id ON probes(probe_node_id);
 CREATE INDEX IF NOT EXISTS idx_probes_checked_at ON probes(checked_at);
+
+CREATE TABLE IF NOT EXISTS target_states (
+    id BIGSERIAL PRIMARY KEY,
+    target_id INTEGER REFERENCES targets(id) ON DELETE CASCADE,
+    probe_node_id INTEGER REFERENCES probe_nodes(id) ON DELETE CASCADE,
+    state VARCHAR(10) NOT NULL,
+    details JSONB,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now(),
+    UNIQUE (target_id, probe_node_id)
+);
+
+ALTER TABLE target_states ADD COLUMN IF NOT EXISTS probe_node_id INTEGER REFERENCES probe_nodes(id) ON DELETE CASCADE;
+
+CREATE INDEX IF NOT EXISTS idx_target_states_target_id ON target_states(target_id);
+CREATE INDEX IF NOT EXISTS idx_target_states_probe_node_id ON target_states(probe_node_id);
 
 CREATE TABLE IF NOT EXISTS events (
     id BIGSERIAL PRIMARY KEY,
@@ -47,6 +87,56 @@ CREATE TABLE IF NOT EXISTS events (
 
 CREATE INDEX IF NOT EXISTS idx_events_target_id ON events(target_id);
 CREATE INDEX IF NOT EXISTS idx_events_created_at ON events(created_at);
+
+CREATE TABLE IF NOT EXISTS xray_probe_results (
+    id BIGSERIAL PRIMARY KEY,
+    probe_node_id INTEGER REFERENCES probe_nodes(id) ON DELETE CASCADE,
+    profile_id TEXT NOT NULL,
+    profile_name TEXT NOT NULL,
+    subscription_name TEXT DEFAULT 'default',
+    protocol TEXT NOT NULL,
+    transport TEXT,
+    security TEXT,
+    sni TEXT,
+    fingerprint TEXT,
+    server_host TEXT NOT NULL,
+    server_port INTEGER NOT NULL,
+    socks_port INTEGER,
+    test_url TEXT NOT NULL,
+    ok BOOLEAN NOT NULL,
+    latency_ms DOUBLE PRECISION,
+    http_status INTEGER,
+    bytes_downloaded INTEGER,
+    error_type TEXT,
+    error TEXT,
+    checked_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_xray_probe_results_node_checked ON xray_probe_results(probe_node_id, checked_at DESC);
+CREATE INDEX IF NOT EXISTS idx_xray_probe_results_profile_checked ON xray_probe_results(profile_id, checked_at DESC);
+CREATE INDEX IF NOT EXISTS idx_xray_probe_results_ok ON xray_probe_results(ok);
+ALTER TABLE xray_probe_results ADD COLUMN IF NOT EXISTS subscription_name TEXT DEFAULT 'default';
+CREATE INDEX IF NOT EXISTS idx_xray_probe_results_subscription_checked ON xray_probe_results(subscription_name, checked_at DESC);
+
+CREATE TABLE IF NOT EXISTS dpi_probe_results (
+    id BIGSERIAL PRIMARY KEY,
+    probe_node_id INTEGER REFERENCES probe_nodes(id) ON DELETE CASCADE,
+    checker TEXT NOT NULL,
+    target TEXT NOT NULL,
+    method TEXT NOT NULL,
+    ok BOOLEAN NOT NULL,
+    latency_ms DOUBLE PRECISION,
+    http_status INTEGER,
+    error_type TEXT,
+    error TEXT,
+    details JSONB,
+    checked_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_dpi_probe_results_node_checked ON dpi_probe_results(probe_node_id, checked_at DESC);
+CREATE INDEX IF NOT EXISTS idx_dpi_probe_results_checker_checked ON dpi_probe_results(checker, checked_at DESC);
+CREATE INDEX IF NOT EXISTS idx_dpi_probe_results_target_checked ON dpi_probe_results(target, checked_at DESC);
+CREATE INDEX IF NOT EXISTS idx_dpi_probe_results_ok ON dpi_probe_results(ok);
 """
 
 async def init_schema() -> None:

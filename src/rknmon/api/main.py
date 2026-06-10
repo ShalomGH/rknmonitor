@@ -1,18 +1,18 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from prometheus_client import make_asgi_app, Counter, Histogram
 from slowapi.errors import RateLimitExceeded
-from rknmon.db import get_pool, close_pool
+from rknmon.custom_metrics import ensure_event_metric, set_active_targets, update_target_state_metrics
+from rknmon.db import get_pool, close_pool, fetch
 from rknmon.db_schema import init_schema
 from rknmon.probes.scheduler import start_scheduler, shutdown_scheduler
-from rknmon.api import targets, events, alerts, probes, stats, export
+from rknmon.api import targets, events, alerts, probes, stats, export, agents
 from rknmon.api.auth import APIKeyMiddleware
-from rknmon.config.settings import settings
 from rknmon.api.deps import limiter
-import json
 
 REQUEST_COUNT = Counter("http_requests_total", "HTTP requests", ["method", "endpoint", "status"])
 REQUEST_DURATION = Histogram("http_request_duration_seconds", "HTTP request duration", ["method", "endpoint"])
@@ -23,10 +23,23 @@ STATIC_DIR = BASE_DIR / "static"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
+
+async def hydrate_metrics_from_db() -> None:
+    active_row = await fetch("SELECT COUNT(*) AS n FROM targets WHERE is_active = true")
+    set_active_targets(int(active_row[0]["n"]) if active_row else 0)
+
+    state_rows = await fetch("SELECT state, COUNT(*) AS n FROM target_states GROUP BY state")
+    update_target_state_metrics({r["state"]: r["n"] for r in state_rows})
+
+    event_rows = await fetch("SELECT DISTINCT event_type FROM events")
+    for row in event_rows:
+        ensure_event_metric(row["event_type"])
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     await get_pool()
     await init_schema()
+    await hydrate_metrics_from_db()
     start_scheduler()
     yield
     await shutdown_scheduler()
@@ -43,6 +56,7 @@ app.include_router(alerts.router)
 app.include_router(probes.router)
 app.include_router(stats.router)
 app.include_router(export.router)
+app.include_router(agents.router)
 
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
 
@@ -73,11 +87,11 @@ async def target_detail(request: Request, target_id: int):
     if not target:
         from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Target not found")
-    probes = await fetch(
+    probes_rows = await fetch(
         "SELECT * FROM probes WHERE target_id = $1 ORDER BY checked_at DESC LIMIT 50",
         target_id,
     )
-    events = await fetch(
+    events_rows = await fetch(
         "SELECT * FROM events WHERE target_id = $1 ORDER BY created_at DESC LIMIT 50",
         target_id,
     )
@@ -86,10 +100,11 @@ async def target_detail(request: Request, target_id: int):
         "target_detail.html",
         {
             "target": dict(target),
-            "probes": [dict(r) for r in probes],
-            "events": [dict(r) for r in events],
+            "probes": [dict(r) for r in probes_rows],
+            "events": [dict(r) for r in events_rows],
         },
     )
+
 
 def _json_default(obj):
     from datetime import datetime
@@ -99,8 +114,8 @@ def _json_default(obj):
 
 @app.get("/ui/dashboard_data")
 async def dashboard_data():
-    from rknmon.db import fetch, fetchrow
-    targets = await fetch(
+    from rknmon.db import fetch
+    targets_rows = await fetch(
         "SELECT id, domain, state, category, is_active FROM targets WHERE is_active = true ORDER BY id"
     )
     by_state = await fetch(
@@ -131,7 +146,7 @@ async def dashboard_data():
         """
     )
     return {
-        "targets": [dict(r) for r in targets],
+        "targets": [dict(r) for r in targets_rows],
         "by_state": {r["state"]: r["n"] for r in by_state},
         "events_24h": {r["event_type"]: r["n"] for r in events_24h},
         "daily_events": [dict(r) for r in daily_events],

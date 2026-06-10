@@ -8,4 +8,8 @@ __pycache__
 htmlcov
 *.db
 .env
+.env.*
+monitoring/nginx/ssl/*.pem
+monitoring/nginx/ssl/*.key
+monitoring/nginx/ssl/*.crt
 .alembic/versions/*.pyc

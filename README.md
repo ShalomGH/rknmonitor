@@ -1,12 +1,14 @@
 # RKN Blocks Monitoring v1.0.0
 
+> **LLM-агенты:** начни с `AGENTS.md` → `PROJECT_CONTEXT.md` (полный контекст для LLM) или `QUICKREF.md` (TL;DR). Этот файл — для быстрого старта человеком.
+
 Мониторинг блокировок РКН: проверка доступности доменов через HTTP(S) + DNS, обнаружение подмены/блокировки, алерты и дашборд.
 
 ## Быстрый старт (dev)
 
 ```bash
 docker compose up -d db
-uvicorn rknmon.api.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn rknmon.api.main:app --reload --host 0.0.0.0 --port 23234
 ```
 
 ## Быстрый старт (prod)
@@ -15,6 +17,66 @@ uvicorn rknmon.api.main:app --reload --host 0.0.0.0 --port 8000
 cp .env.example .env
 # edit .env
 docker compose -f docker-compose.prod.yml up -d
+```
+
+## Docker agent (Raspberry / другие ноды)
+
+Агент работает без VPN и без входящих портов: только outbound HTTPS в центральный API.
+
+### Raspberry Pi quick deploy
+
+```bash
+sudo apt update
+sudo apt install -y docker.io docker-compose-plugin git
+sudo usermod -aG docker $USER
+newgrp docker
+
+git clone <repo-url> /opt/rkn-blocks-monitoring
+cd /opt/rkn-blocks-monitoring
+cp .env.agent.example .env.agent
+vim .env.agent
+
+docker compose -f docker-compose.agent.yml up -d --build
+```
+
+Поток запросов:
+- `POST /agent/register`
+- `POST /agent/heartbeat`
+- `GET /agent/targets`
+- `POST /agent/results`
+- `POST /agent/xray-results` — если включён `XRAY_ENABLED=true`
+
+### Xray subscription monitoring
+
+`docker-compose.agent.yml` запускает два контейнера:
+
+- `rknmon-agent` — скачивает подписки, пишет `/config/xray.generated.json`, ждёт SOCKS-порты, отправляет результаты в центр.
+- `rknmon-xray` — sidecar с `teddysun/xray`, ждёт появления `/config/xray.generated.json` и стартует с ним.
+
+Оба контейнера используют общий network namespace через `network_mode: service:rknmon-xray`, поэтому агент ходит в Xray по `127.0.0.1:11001+`. Системный default route не меняется, TUN/VPN не поднимается, через Xray идут только явные `curl --proxy socks5h://127.0.0.1:<port>` пробы.
+
+Минимальные Xray env:
+
+```bash
+XRAY_ENABLED=true
+XRAY_SUBSCRIPTION_URLS=https://sub.example/sub-token,https://198.51.100.10/sub-token
+XRAY_TEST_URL=https://cp.cloudflare.com/
+XRAY_SOCKS_START_PORT=11001
+XRAY_CONFIG_PATH=/config/xray.generated.json
+XRAY_WAIT_FOR_SOCKS=true
+XRAY_READY_TIMEOUT_SECONDS=90
+```
+
+One-shot проверка:
+
+```bash
+docker compose -f docker-compose.agent.yml run --rm rknmon-agent --once
+```
+
+Логи:
+
+```bash
+docker compose -f docker-compose.agent.yml logs -f rknmon-agent
 ```
 
 ## Компоненты

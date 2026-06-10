@@ -1,0 +1,44 @@
+services:
+  rknmon-xray:
+    image: teddysun/xray:latest
+    container_name: ${XRAY_CONTAINER_NAME:-rknmon-xray}
+    restart: unless-stopped
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - |
+        until [ -s /config/xray.generated.json ]; do
+          echo "waiting for /config/xray.generated.json"
+          sleep 1
+        done
+        exec xray run -config /config/xray.generated.json
+    volumes:
+      - xray-config:/config
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
+
+  rknmon-agent:
+    build:
+      context: .
+      dockerfile: Dockerfile.agent
+    container_name: ${AGENT_NAME:-rknmon-agent}
+    restart: unless-stopped
+    env_file:
+      - path: .env.agent
+        required: false
+      - path: .env.xray
+        required: false
+    network_mode: service:rknmon-xray
+    depends_on:
+      - rknmon-xray
+    volumes:
+      - xray-config:/config
+    environment:
+      XRAY_ENABLED: ${XRAY_ENABLED:-true}
+      XRAY_CONFIG_PATH: /config/xray.generated.json
+      XRAY_WAIT_FOR_SOCKS: ${XRAY_WAIT_FOR_SOCKS:-true}
+      XRAY_READY_TIMEOUT_SECONDS: ${XRAY_READY_TIMEOUT_SECONDS:-90}
+    command: ["--write-xray-config"]
+
+volumes:
+  xray-config:

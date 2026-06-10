@@ -1,13 +1,23 @@
 {
   "uid": "rknmon-main",
   "title": "RKN Blocks Monitoring",
-  "tags": ["rknmon", "monitoring"],
-  "timezone": "UTC",
+  "tags": [
+    "rknmon",
+    "monitoring"
+  ],
+  "timezone": "Asia/Omsk",
   "schemaVersion": 40,
   "refresh": "30s",
-  "time": {"from": "now-6h", "to": "now"},
-  "templating": {"list": []},
-  "annotations": {"list": []},
+  "time": {
+    "from": "now-6h",
+    "to": "now"
+  },
+  "templating": {
+    "list": []
+  },
+  "annotations": {
+    "list": []
+  },
   "panels": [
     {
       "id": 1,
@@ -20,7 +30,12 @@
           "refId": "A"
         }
       ],
-      "gridPos": {"h": 4, "w": 4, "x": 0, "y": 0}
+      "gridPos": {
+        "h": 4,
+        "w": 4,
+        "x": 0,
+        "y": 0
+      }
     },
     {
       "id": 2,
@@ -33,8 +48,16 @@
           "refId": "A"
         }
       ],
-      "gridPos": {"h": 8, "w": 8, "x": 4, "y": 0},
-      "options": {"orientation": "horizontal", "displayMode": "gradient"}
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 4,
+        "y": 0
+      },
+      "options": {
+        "orientation": "horizontal",
+        "displayMode": "gradient"
+      }
     },
     {
       "id": 3,
@@ -47,7 +70,12 @@
           "refId": "A"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0}
+      "gridPos": {
+        "h": 4,
+        "w": 14,
+        "x": 10,
+        "y": 0
+      }
     },
     {
       "id": 4,
@@ -60,7 +88,12 @@
           "refId": "A"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 8}
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 4
+      }
     },
     {
       "id": 5,
@@ -73,33 +106,236 @@
           "refId": "A"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 8}
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 4
+      }
     },
     {
-      "id": 6,
-      "title": "HTTP Request Rate (req/s)",
-      "type": "timeseries",
+      "id": 9,
+      "title": "Заблокированные и подозрительные сайты",
+      "type": "table",
+      "datasource": {
+        "type": "postgres",
+        "uid": "grafana-postgres"
+      },
       "targets": [
         {
-          "expr": "rate(http_requests_total[1m])",
-          "legendFormat": "{{method}} {{endpoint}}",
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "grafana-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  t.id,\n  t.domain,\n  ts.state,\n  ts.updated_at AS last_check,\n  jsonb_pretty(ts.details) AS details,\n  pn.name AS agent\nFROM target_states ts\nJOIN targets t ON ts.target_id = t.id\nJOIN probe_nodes pn ON ts.probe_node_id = pn.id\nWHERE ts.state IN ('blocked', 'suspected')\nORDER BY ts.state, ts.updated_at DESC;"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 0, "y": 16}
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "state"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": 1,
+                    "options": {
+                      "blocked": {
+                        "text": "blocked",
+                        "color": "red"
+                      },
+                      "suspected": {
+                        "text": "suspected",
+                        "color": "yellow"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 12
+      }
     },
     {
-      "id": 7,
-      "title": "HTTP Request Duration (p95)",
+      "id": 10,
+      "title": "Заблокированные и suspected домены (таймлайн)",
       "type": "timeseries",
+      "datasource": {
+        "type": "postgres",
+        "uid": "grafana-postgres"
+      },
       "targets": [
         {
-          "expr": "histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m]))",
-          "legendFormat": "{{method}} {{endpoint}}",
-          "refId": "A"
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "grafana-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  e.created_at AS \"time\",\n  t.domain,\n  CASE e.new_state\n    WHEN 'blocked' THEN 2\n    WHEN 'suspected' THEN 1\n    ELSE 0\n  END AS state_value\nFROM events e\nJOIN targets t ON e.target_id = t.id\nWHERE e.event_type = 'state_changed'\n  AND e.created_at > NOW() - INTERVAL '7 days'\n  AND t.domain IN (\n    SELECT DISTINCT t2.domain\n    FROM events e2\n    JOIN targets t2 ON e2.target_id = t2.id\n    WHERE e2.new_state IN ('blocked', 'suspected')\n      AND e2.created_at > NOW() - INTERVAL '7 days'\n  )\nORDER BY t.domain, e.created_at"
         }
       ],
-      "gridPos": {"h": 8, "w": 12, "x": 12, "y": 16}
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "stepBefore",
+            "lineWidth": 2,
+            "spanNulls": -1,
+            "fillOpacity": 10
+          },
+          "unit": "none",
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "green",
+                  "text": "clear"
+                },
+                "1": {
+                  "color": "yellow",
+                  "text": "suspected"
+                },
+                "2": {
+                  "color": "red",
+                  "text": "blocked"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "min": -0.5,
+          "max": 2.5,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        }
+      },
+      "gridPos": {
+        "h": 20,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      }
+    },
+    {
+      "id": 8,
+      "title": "Agents",
+      "type": "table",
+      "datasource": {
+        "type": "postgres",
+        "uid": "grafana-postgres"
+      },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": {
+            "type": "postgres",
+            "uid": "grafana-postgres"
+          },
+          "format": "table",
+          "rawQuery": true,
+          "rawSql": "SELECT\n  name,\n  COALESCE(location, '') AS location,\n  COALESCE(provider, '') AS provider,\n  COALESCE(agent_version, '') AS agent_version,\n  last_seen_at,\n  CASE\n    WHEN last_seen_at IS NULL THEN 'never_seen'\n    WHEN last_seen_at > now() - interval '10 minutes' THEN 'online'\n    ELSE 'stale'\n  END AS status\nFROM probe_nodes\nORDER BY\n  CASE\n    WHEN last_seen_at IS NULL THEN 1\n    WHEN last_seen_at > now() - interval '10 minutes' THEN 0\n    ELSE 1\n  END,\n  last_seen_at DESC NULLS LAST,\n  name;"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": 1,
+                    "options": {
+                      "online": {
+                        "text": "online",
+                        "color": "green"
+                      },
+                      "stale": {
+                        "text": "stale",
+                        "color": "yellow"
+                      },
+                      "never_seen": {
+                        "text": "never_seen",
+                        "color": "red"
+                      }
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "options": {
+        "showHeader": true,
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        }
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 40
+      }
     }
   ]
 }

@@ -3,9 +3,9 @@ services:
     image: postgres:16-alpine
     container_name: rknmon_db
     environment:
-      POSTGRES_USER: rknmon
-      POSTGRES_PASSWORD: rknmon_dev
-      POSTGRES_DB: rknmon
+      POSTGRES_USER: ${POSTGRES_USER:-rknmon}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
+      POSTGRES_DB: ${POSTGRES_DB:-rknmon}
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
@@ -22,7 +22,7 @@ services:
       dockerfile: Dockerfile
     container_name: rknmon_app
     environment:
-      DATABASE_URL: postgresql://rknmon:rknmon_dev@db:5432/rknmon
+      DATABASE_URL: postgresql://${POSTGRES_USER:-rknmon}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-rknmon}
       LOG_LEVEL: debug
     ports:
       - "127.0.0.1:8000:8000"

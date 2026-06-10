@@ -5,9 +5,17 @@ __pycache__/
 .venv/
 .ENV
 .env
+.env.agent
+.env.xray
 *.egg-info/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
 *.log
 pgdata/
+
+# Local secrets / generated TLS material
+monitoring/nginx/nginx.conf
+monitoring/nginx/ssl/*.pem
+monitoring/nginx/ssl/*.key
+monitoring/nginx/ssl/*.crt

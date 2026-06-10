@@ -1,10 +1,9 @@
 # RKN Blocks Monitoring — Operations Runbook
 
 ## Start (dev)
-
 ```bash
 docker compose up -d db
-uvicorn rknmon.api.main:app --reload --host 0.0.0.0 --port 8000
+uvicorn rknmon.api.main:app --reload --host 0.0.0.0 --port 23234
 ```
 
 ## Start (prod)
@@ -20,7 +19,7 @@ docker compose -f docker-compose.prod.yml up -d
 | Сервис | Порт | Описание |
 |--------|------|----------|
 | Postgres | 127.0.0.1:5432 | БД, только локальный доступ |
-| rknmon app | 0.0.0.0:8000 | FastAPI + probes + self-metrics |
+| rknmon app | 0.0.0.0:23234 | FastAPI + probes + self-metrics |
 | Prometheus | — (только внутри сети) | Сбор метрик с `/metrics` rknmon |
 | Grafana | 0.0.0.0:3000 | Дашборд с визуализацией (логин/пароль из `.env`) |
 
@@ -31,7 +30,7 @@ docker compose -f docker-compose.prod.yml up -d
 docker compose -f docker-compose.prod.yml ps
 
 # Проверить что Prometheus собирает метрики
-docker compose -f docker-compose.prod.yml exec prometheus wget -qO- http://app:8000/metrics | head
+docker compose -f docker-compose.prod.yml exec prometheus wget -qO- http://app:8000/metrics | head   # внутри Docker-сети приложение слушает 8000
 
 # Логин в Grafana: http://<host>:3000
 # Логин/пароль = GRAFANA_ADMIN_USER / GRAFANA_ADMIN_PASSWORD из .env
@@ -55,10 +54,9 @@ DATABASE_URL=postgresql://... ./scripts/backup.sh
 ```
 
 ## Synthetic data for load test
-
 ```bash
 DATABASE_URL=... python scripts/generate_synthetic.py 500
-locust -f scripts/locustfile.py --host http://127.0.0.1:8000
+locust -f scripts/locustfile.py --host http://127.0.0.1:23234
 ```
 
 ## Auth
@@ -80,9 +78,15 @@ Grafana имеет собственную аутентификацию (admin pa
 - `docker compose -f docker-compose.prod.yml ps` — состояние контейнеров
 
 ## Common issues
-
 1. **DB connection refused** — check `DATABASE_URL` and that PG is running
 2. **403 on API calls** — add `X-API-Key` header or check exempt paths
 3. **Backup fails** — ensure `pg_dump` is installed and `DATABASE_URL` is set
 4. **Grafana не видит Prometheus** — проверить что `prometheus` внутри Docker сети `rknmon` доступен: `docker compose exec grafana ping prometheus`
 5. **Дашборд не подгрузился** — проверить `grafana/provisioning/datasources/datasource.yml` и права на `/var/lib/grafana/dashboards`
+6. **Xray agent не отправляет данные** — проверить:
+   - `docker logs -f rknmon-agent` — нет ли `Xray SOCKS ports timeout`?
+   - `docker logs -f rknmon-xray` — стартовал ли с `/config/xray.generated.json`?
+   - `curl -sS http://127.0.0.1:23234/metrics/ | grep rknmon_xray_profile_status` — есть ли свежие лейблы `subscription="..."`?
+   - DB: `sudo docker exec rknmon_db psql -U rknmon -d rknmon -P pager=off -c "SELECT COALESCE(subscription_name,'default'), count(*), max(checked_at) FROM xray_probe_results GROUP BY 1;"`
+7. **Grafana Xray dashboard показывает пусто** — проверить что datasource uid `PBFA97CFB590B2093` (Prometheus) и `grafana-postgres` совпадают с тем, что в `grafana/provisioning/datasources/datasource.yml`. Если переустановили Grafana — `editable: true, allowUiUpdates: true` в `dashboards.yml` обязателен.
+8. **Подписки на RPi** — реальные ссылки лежат в `/home/ubuntu/rkn-blocks-monitoring-agent/.env.xray` (поля `XRAY_SUBSCRIPTION_URLS`, `XRAY_SUBSCRIPTION_NAMES`). Чтобы добавить новую подписку, обновить этот файл и `docker compose -f docker-compose.agent.yml up -d --force-recreate rknmon-agent`.

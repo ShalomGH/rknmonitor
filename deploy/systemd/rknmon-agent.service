@@ -1,0 +1,16 @@
+[Unit]
+Description=RKN Monitoring Probe Agent
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=ubuntu
+WorkingDirectory=/opt/rkn-blocks-monitoring
+EnvironmentFile=/opt/rkn-blocks-monitoring/.env.agent
+ExecStart=/opt/rkn-blocks-monitoring/.venv/bin/python -m rknmon.agent.cli
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

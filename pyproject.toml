@@ -7,7 +7,22 @@ name = "rknmon"
 version = "0.1.0"
 description = "RKN Blocks Monitoring"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+  "aiohttp",
+  "aiodns",
+  "asyncpg",
+  "fastapi",
+  "jinja2",
+  "prometheus-client",
+  "pydantic",
+  "pydantic-settings",
+  "slowapi",
+  "starlette",
+  "uvicorn",
+]
+
+[project.scripts]
+rknmon-agent = "rknmon.agent.cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

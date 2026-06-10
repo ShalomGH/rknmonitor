@@ -6,8 +6,20 @@ router = APIRouter(prefix="/probes", tags=["probes"])
 
 @router.get("/latest")
 @limiter.limit("100/minute")
-async def list_latest(request: Request, target_id: int | None = None, limit: int = 100):
-    if target_id:
+async def list_latest(request: Request, target_id: int | None = None, probe_node_id: int | None = None, limit: int = 100):
+    if target_id and probe_node_id:
+        rows = await fetch(
+            """
+            SELECT p.*, t.domain
+            FROM probes p
+            JOIN targets t ON t.id = p.target_id
+            WHERE p.target_id = $1 AND p.probe_node_id = $2
+            ORDER BY p.checked_at DESC
+            LIMIT $3
+            """,
+            target_id, probe_node_id, limit,
+        )
+    elif target_id:
         rows = await fetch(
             """
             SELECT p.*, t.domain
@@ -18,6 +30,17 @@ async def list_latest(request: Request, target_id: int | None = None, limit: int
             LIMIT $2
             """,
             target_id, limit,
+        )
+    elif probe_node_id:
+        rows = await fetch(
+            """
+            SELECT DISTINCT ON (target_id) p.*, t.domain
+            FROM probes p
+            JOIN targets t ON t.id = p.target_id
+            WHERE p.probe_node_id = $1
+            ORDER BY target_id, checked_at DESC
+            """,
+            probe_node_id,
         )
     else:
         rows = await fetch(

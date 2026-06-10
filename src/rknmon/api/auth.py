@@ -4,12 +4,11 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from rknmon.config.settings import settings
 
 EXEMPT_PATHS = {"/", "/health", "/metrics", "/openapi.json", "/docs", "/redoc", "/ui/dashboard", "/ui/dashboard_data"}
-EXEMPT_PREFIXES = ("/ui/", "/static/")
+EXEMPT_PREFIXES = ("/ui/", "/static/", "/agent/")
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
-        # Normalize empty string from root "/" after potential strip
         normalized = path.rstrip("/") if path != "/" else "/"
         if normalized in EXEMPT_PATHS or normalized.startswith(EXEMPT_PREFIXES):
             return await call_next(request)

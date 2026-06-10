@@ -24,17 +24,19 @@ services:
     container_name: rknmon_app
     restart: unless-stopped
     environment:
-      DATABASE_URL: postgresql://$${POSTGRES_USER}:$${POSTGRES_PASSWORD}@db:5432/$${POSTGRES_DB:-rknmon}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-rknmon}:${POSTGRES_PASSWORD:-changeme}@db:5432/${POSTGRES_DB:-rknmon}
       LOG_LEVEL: ${LOG_LEVEL:-info}
       API_KEY: ${API_KEY:-change-me-in-production}
       PROBE_INTERVAL_MINUTES: ${PROBE_INTERVAL_MINUTES:-10}
       EVENT_RETENTION_DAYS: ${EVENT_RETENTION_DAYS:-365}
     ports:
-      - "0.0.0.0:8000:8000"
+      - "0.0.0.0:23234:8000"
     depends_on:
       db:
         condition: service_healthy
-    command: uvicorn rknmon.api.main:app --host 0.0.0.0 --port 8000 --workers 2
+    # Single worker: scheduler and prometheus_client metrics are in-process.
+    # Multiple workers split metrics between processes and can make Grafana panels randomly empty.
+    command: uvicorn rknmon.api.main:app --host 0.0.0.0 --port 8000 --workers 1
     logging:
       driver: json-file
       options:
@@ -69,18 +71,36 @@ services:
       GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
       GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
       GF_SERVER_ROOT_URL: ${GRAFANA_ROOT_URL:-http://localhost:3000}
+      GF_DATE_FORMATS_DEFAULT_TIMEZONE: Asia/Omsk
       GF_AUTH_ANONYMOUS_ENABLED: "false"
       GF_SECURITY_ALLOW_EMBEDDING: "false"
+      POSTGRES_DB: ${POSTGRES_DB:-rknmon}
+      POSTGRES_USER: ${POSTGRES_USER:-rknmon}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme}
     volumes:
       - ./grafana/provisioning:/etc/grafana/provisioning:ro
       - ./grafana/dashboards:/var/lib/grafana/dashboards:ro
       - grafana_data:/var/lib/grafana
-    ports:
-      - "0.0.0.0:3000:3000"
-    depends_on:
-      - prometheus
+    # Доступ только через nginx — порт не выставляется
+    # ports:
+    #   - "0.0.0.0:3000:3000"
     networks:
       - rknmon
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: rknmon_nginx
+    restart: unless-stopped
+    ports:
+      - "0.0.0.0:8443:8443"
+    volumes:
+      - ${NGINX_CONF_PATH:-./monitoring/nginx/nginx.conf.example}:/etc/nginx/conf.d/default.conf:ro
+      - ./monitoring/nginx/ssl:/ssl:ro
+    networks:
+      - rknmon
+    depends_on:
+      - grafana
+      - prometheus
 
 volumes:
   pgdata:

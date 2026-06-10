@@ -46,7 +46,14 @@ src/rknmon/
 │   ├── stats.py      # Агрегаты
 │   ├── export.py     # CSV/JSON экспорт
 │   ├── alerts.py     # Webhook alerting
+│   ├── agents.py     # Agent API: /agent/register, /agent/heartbeat, /agent/targets, /agent/results, /agent/xray-results (X-Node-API-Key)
 │   └── auth.py       # API key middleware
+├── agent/            # Код RPi-агента, запускается и на central в тестах
+│   ├── client.py     # AgentClient: register/heartbeat/fetch_targets/submit_results/submit_xray_results
+│   ├── config.py     # Pydantic-settings: central_api_url, node_api_key, xray_subscription_urls, xray_subscription_names, ...
+│   ├── xray.py       # XrayProfile, parse_subscription_text, build_xray_config, load_profiles_from_urls
+│   ├── runner.py     # run_probe_cycle, run_xray_probe_cycle, write_xray_config, wait_for_tcp_ports, default_probe_xray_profile
+│   └── cli.py        # argparse entrypoint: --once, --xray-only, --write-xray-config
 ├── probes/           # Ядро мониторинга
 │   ├── orchestrator.py   # Конкурентный запуск проб с семафором
 │   ├── http_probe.py     # HTTP(S) пробы через aiohttp
@@ -98,8 +105,8 @@ clear ──(score >=2)──► suspected ──(score >=4)──► blocked
 | API CRUD | `X-API-Key` | `/targets`, `/events`, `/probes/*`, `/stats`, `/export/*`, `/alerts/webhook` |
 
 ### Безопасность сети (prod)
-- **Приложение** (`:8000`): bind `0.0.0.0`, iptables whitelist через `DOCKER-USER` цепочку
-- **База данных** (`:5432`): bind `127.0.0.1`, наружу не выставлена
+- **Приложение** (`:23234`, на хосте): bind `0.0.0.0`, iptables whitelist через `DOCKER-USER` цепочку, наружу — через `nginx 8443` (TLS).
+- **База данных** (`:5432`): bind `127.0.0.1`, наружу не выставлена.
 - **Whitelist IP:** см. `secure-server-run` skill (7 публичных IP + localhost + private subnets). Все остальные → DROP.
 
 ---
@@ -135,22 +142,21 @@ docker build -t rknmon:1.0.0 .
 docker compose -f docker-compose.prod.yml up -d
 
 # 4. Проверка
-curl http://127.0.0.1:8000/health
+curl http://127.0.0.1:23234/health
 ```
 
 ### Dev (без Docker)
 ```bash
 docker compose up -d db       # только PostgreSQL
-uvicorn src.rknmon.api.main:app --reload --host 127.0.0.1 --port 8000
+uvicorn rknmon.api.main:app --reload --host 127.0.0.1 --port 23234
 # PYTHONPATH=src обязателен (установлен в pyproject.toml при pip install -e .)
 ```
 
 ---
 
 ## Тесты
-
 ```bash
-pytest tests/                 # 32 теста (на момент v1.0)
+pytest tests/                 # 59 тестов (актуально на 2026-06-09)
 ```
 
 Ключевые покрытия: API CRUD, classifier scoring, DNS/HTTP probe mocking, scheduler graceful shutdown, evaluator batch N+1 fix, vendor JS self-hosting.
@@ -177,6 +183,9 @@ pytest tests/                 # 32 теста (на момент v1.0)
 - ✅ Graceful shutdown + cleanup реализованы
 - ✅ Evaluator N+1 fixed (batch queries)
 - ✅ Advisory lock для schema init (race condition при старте)
+- ✅ **Xray monitoring** — agent+RPi sidecar запущен, `/agent/xray-results` принимает результаты, Grafana `rknmon-xray` (uid) с фильтрами `Agent`/`Subscription` готов
+- ✅ **Multi-subscription support** — `XRAY_SUBSCRIPTION_URLS` + `XRAY_SUBSCRIPTION_NAMES` (comma-separated, в одном порядке), 2 подписки активны на RPi: `rpi-main`, `rpi-onlycry` (12 профилей, 10 OK, 2 failed `xhttp-legacy`)
+- ✅ **Grafana provisioning editable + allowUiUpdates** — дашборды можно править из UI
 - ⚠️ **Списка реальных доменов нет** — в базе только `example.com` (тестовый)
 - ⚠️ **External vantage point не реализован** — нет подтверждения блокировки из-за рубежа
 
@@ -185,13 +194,20 @@ pytest tests/                 # 32 теста (на момент v1.0)
 1. **Загрузить список доменов** для мониторинга через `POST /targets` (curl/API) либо `scripts/ingest.py` (CSV).
 2. **Настроить webhook alerts** — URL и формат см. `src/rknmon/alerts/webhook.py`.
 3. **Добавить external vantage** (опционально) — REST endpoint на сервере за пределами РФ для double-check.
-4. **TLS / reverse proxy** — в prod nginx с Let's Encrypt (порт 8000 → 443).
+4. **Алёрты на Xray failures** — `rknmon_xray_profile_status{...}==0` или spike в `rknmon_xray_profile_errors_total` (пока только дашборд).
+5. **Multi-vantage agents** — добавить RPi-агенты на других провайдерах / локациях для cross-ISP корреляции.
+6. **TLS / reverse proxy** — в prod nginx уже работает на `:8443` → app `:23234`. Let's Encrypt не подключали — используется существующий сертификат.
 
 ---
 
 ## Связанные документы
 
 - `README.md` — быстрый старт и endpoints (человеко-ориентированный)
+- `AGENTS.md` — точка входа для LLM-агентов, указывает на PROJECT_CONTEXT/QUICKREF
+- `PROJECT_CONTEXT.md` — полный LLM-контекст (архитектура, история, инварианты, runbook, соглашения)
+- `QUICKREF.md` — TL;DR карточка для новых LLM-сессий
 - `RUNBOOK.md` — бэкапы, нагрузочные тесты, troubleshooting
+- `deploy/README-agent.md` — deploy guide для RPi-агента
 - `IMPLEMENTATION_PLAN.md` — история реализации (M1-M6)
+- `docs/superpowers/plans/2026-06-09-xray-monitoring.md` — план реализации Xray-фичи
 - `.env` — не в git, генерируется руками
