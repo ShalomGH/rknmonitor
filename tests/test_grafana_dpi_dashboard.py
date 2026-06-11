@@ -50,19 +50,80 @@ def test_dpi_dashboard_has_operator_variables():
 def test_dpi_dashboard_has_operational_kpi_row():
     dashboard = load_dashboard()
 
-    for title in [
-        "Overall DPI status",
-        "Affected targets",
-        "Affected agents",
-        "Latest failure age",
-    ]:
+    expected = {
+        "Overall DPI status": {
+            "x": 0,
+            "expr": 'sum(1 - rknmon_dpi_check_status{agent=~"$agent", method=~"$method", target=~"$target"})',
+        },
+        "Affected targets": {
+            "x": 6,
+            "expr": 'count(count by (target) (rknmon_dpi_check_status{agent=~"$agent", method=~"$method", target=~"$target"} == 0))',
+        },
+        "Affected agents": {
+            "x": 12,
+            "expr": 'count(count by (agent) (rknmon_dpi_check_status{agent=~"$agent", method=~"$method", target=~"$target"} == 0))',
+        },
+        "Latest failure age": {
+            "x": 18,
+            "expr": 'time() - max(timestamp(rknmon_dpi_check_status{agent=~"$agent", method=~"$method", target=~"$target"} == 0))',
+        },
+    }
+
+    for title, spec in expected.items():
         panel = panel_by_title(dashboard, title)
         assert panel["type"] == "stat"
-        assert panel["gridPos"]["y"] == 0
+        assert panel["datasource"] == {"type": "prometheus", "uid": PROM_UID}
+        assert panel["gridPos"] == {"h": 5, "w": 6, "x": spec["x"], "y": 0}
+        assert panel["options"]["colorMode"] == "background"
+        assert panel["targets"][0]["datasource"] == {"type": "prometheus", "uid": PROM_UID}
+        assert panel["targets"][0]["expr"] == spec["expr"]
 
-    overall = panel_by_title(dashboard, "Overall DPI status")
-    assert overall["datasource"]["uid"] == PROM_UID
-    assert "rknmon_dpi_check_status" in target_text(overall)
+    overall_defaults = panel_by_title(dashboard, "Overall DPI status")["fieldConfig"][
+        "defaults"
+    ]
+    assert [
+        step["color"] for step in overall_defaults["thresholds"]["steps"]
+    ] == ["green", "yellow", "red"]
+
+    latest_defaults = panel_by_title(dashboard, "Latest failure age")["fieldConfig"][
+        "defaults"
+    ]
+    assert latest_defaults["unit"] == "s"
+    assert [
+        (step["color"], step["value"])
+        for step in latest_defaults["thresholds"]["steps"]
+    ] == [("green", None), ("yellow", 300), ("red", 1800)]
+
+    overall_mappings = panel_by_title(dashboard, "Overall DPI status")["fieldConfig"][
+        "defaults"
+    ]["mappings"]
+    assert any(
+        mapping.get("type") == "value" and mapping.get("options", {}).get("0", {}).get("text") == "OK"
+        for mapping in overall_mappings
+    )
+    assert any(
+        mapping.get("type") == "range"
+        and mapping.get("options", {}).get("from") == 1
+        and mapping.get("options", {}).get("to") == 2
+        and mapping.get("options", {}).get("result", {}).get("text") == "Degraded"
+        for mapping in overall_mappings
+    )
+    assert any(
+        mapping.get("type") == "special"
+        and mapping.get("options", {}).get("match") == "null"
+        and mapping.get("options", {}).get("result", {}).get("text") == "No data"
+        for mapping in overall_mappings
+    )
+
+    latest_mappings = panel_by_title(dashboard, "Latest failure age")["fieldConfig"][
+        "defaults"
+    ]["mappings"]
+    assert any(
+        mapping.get("type") == "special"
+        and mapping.get("options", {}).get("match") == "null"
+        and mapping.get("options", {}).get("result", {}).get("text") == "No data"
+        for mapping in latest_mappings
+    )
 
 
 def test_dpi_dashboard_has_operator_table_from_postgres():

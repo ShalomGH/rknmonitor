@@ -19,17 +19,52 @@
           "color": {
             "mode": "thresholds"
           },
-          "mappings": [],
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "OK",
+                  "color": "green"
+                }
+              }
+            },
+            {
+              "type": "range",
+              "options": {
+                "from": 1,
+                "to": 2,
+                "result": {
+                  "text": "Degraded",
+                  "color": "yellow"
+                }
+              }
+            },
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "No data",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
+                "color": "green",
                 "value": null
               },
               {
-                "color": "green",
+                "color": "yellow",
                 "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
               }
             ]
           },
@@ -48,6 +83,7 @@
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
+        "noValue": "No data",
         "orientation": "auto",
         "reduceOptions": {
           "calcs": [
@@ -67,11 +103,11 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum(rknmon_dpi_check_status{agent=~\"$agent\"})",
+          "expr": "sum(1 - rknmon_dpi_check_status{agent=~\"$agent\", method=~\"$method\", target=~\"$target\"})",
           "refId": "A"
         }
       ],
-      "title": "DPI OK checks",
+      "title": "Overall DPI status",
       "type": "stat"
     },
     {
@@ -93,8 +129,12 @@
                 "value": null
               },
               {
-                "color": "red",
+                "color": "yellow",
                 "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
               }
             ]
           },
@@ -113,6 +153,7 @@
         "colorMode": "background",
         "graphMode": "area",
         "justifyMode": "auto",
+        "noValue": "No data",
         "orientation": "auto",
         "reduceOptions": {
           "calcs": [
@@ -132,11 +173,162 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "sum(1 - rknmon_dpi_check_status{agent=~\"$agent\"})",
+          "expr": "count(count by (target) (rknmon_dpi_check_status{agent=~\"$agent\", method=~\"$method\", target=~\"$target\"} == 0))",
           "refId": "A"
         }
       ],
-      "title": "DPI failed/suspected",
+      "title": "Affected targets",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 6,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "noValue": "No data",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.6.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "count(count by (agent) (rknmon_dpi_check_status{agent=~\"$agent\", method=~\"$method\", target=~\"$target\"} == 0))",
+          "refId": "A"
+        }
+      ],
+      "title": "Affected agents",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "PBFA97CFB590B2093"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "type": "special",
+              "options": {
+                "match": "null",
+                "result": {
+                  "text": "No data",
+                  "color": "gray"
+                }
+              }
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 300
+              },
+              {
+                "color": "red",
+                "value": 1800
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 7,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "auto",
+        "noValue": "No data",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "pluginVersion": "11.6.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "PBFA97CFB590B2093"
+          },
+          "expr": "time() - max(timestamp(rknmon_dpi_check_status{agent=~\"$agent\", method=~\"$method\", target=~\"$target\"} == 0))",
+          "refId": "A"
+        }
+      ],
+      "title": "Latest failure age",
       "type": "stat"
     },
     {
@@ -199,7 +391,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 0
+        "y": 5
       },
       "id": 3,
       "options": {
@@ -265,7 +457,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 8
+        "y": 13
       },
       "id": 4,
       "options": {
@@ -344,7 +536,7 @@
         "h": 10,
         "w": 24,
         "x": 0,
-        "y": 18
+        "y": 23
       },
       "id": 5,
       "options": {
