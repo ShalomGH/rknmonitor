@@ -333,6 +333,282 @@
     },
     {
       "datasource": {
+        "type": "postgres",
+        "uid": "grafana-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "ok": {
+                        "text": "ok",
+                        "color": "green"
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "slow": {
+                        "text": "slow",
+                        "color": "yellow"
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "fail": {
+                        "text": "fail",
+                        "color": "red"
+                      },
+                      "timeout": {
+                        "text": "timeout",
+                        "color": "red"
+                      },
+                      "tcp_rst": {
+                        "text": "tcp_rst",
+                        "color": "red"
+                      },
+                      "sni_drop": {
+                        "text": "sni_drop",
+                        "color": "red"
+                      },
+                      "http_block": {
+                        "text": "http_block",
+                        "color": "red"
+                      },
+                      "error": {
+                        "text": "error",
+                        "color": "red"
+                      }
+                    }
+                  },
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "null",
+                      "result": {
+                        "text": "",
+                        "color": "gray"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "id": 4,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "11.6.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "grafana-postgres"
+          },
+          "format": "table",
+          "rawSql": "WITH latest AS (\n  SELECT\n    n.name AS agent,\n    d.target,\n    d.method,\n    CASE\n      WHEN d.ok THEN 'ok'\n      WHEN d.error_type IS NULL OR d.error_type = '' THEN 'fail'\n      ELSE d.error_type\n    END AS status,\n    d.latency_ms,\n    d.error_type,\n    d.http_status,\n    d.checked_at,\n    row_number() OVER (\n      PARTITION BY n.name, d.target, d.method\n      ORDER BY d.checked_at DESC\n    ) AS rn\n  FROM dpi_probe_results d\n  JOIN probe_nodes n ON n.id = d.probe_node_id\n  WHERE n.name ~ ${agent:sqlstring}\n    AND d.method ~ ${method:sqlstring}\n    AND d.target ~ ${target:sqlstring}\n    AND $__timeFilter(d.checked_at)\n)\nSELECT\n  agent,\n  target,\n  method,\n  status,\n  latency_ms,\n  error_type,\n  http_status,\n  checked_at\nFROM latest\nWHERE rn = 1\nORDER BY\n  CASE\n    WHEN status = 'ok' THEN 3\n    WHEN status = 'slow' THEN 2\n    ELSE 1\n  END,\n  checked_at DESC\nLIMIT 100;",
+          "refId": "A"
+        }
+      ],
+      "title": "What is happening",
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "postgres",
+        "uid": "grafana-postgres"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "inspect": false
+          },
+          "mappings": [],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "status"
+            },
+            "properties": [
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "ok": {
+                        "text": "ok",
+                        "color": "green"
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "slow": {
+                        "text": "slow",
+                        "color": "yellow"
+                      }
+                    }
+                  },
+                  {
+                    "type": "value",
+                    "options": {
+                      "fail": {
+                        "text": "fail",
+                        "color": "red"
+                      },
+                      "timeout": {
+                        "text": "timeout",
+                        "color": "red"
+                      },
+                      "tcp_rst": {
+                        "text": "tcp_rst",
+                        "color": "red"
+                      },
+                      "sni_drop": {
+                        "text": "sni_drop",
+                        "color": "red"
+                      },
+                      "http_block": {
+                        "text": "http_block",
+                        "color": "red"
+                      },
+                      "error": {
+                        "text": "error",
+                        "color": "red"
+                      }
+                    }
+                  },
+                  {
+                    "type": "special",
+                    "options": {
+                      "match": "null",
+                      "result": {
+                        "text": "",
+                        "color": "gray"
+                      }
+                    }
+                  }
+                ]
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-text"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "id": 5,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "countRows": false,
+          "fields": "",
+          "reducer": [
+            "sum"
+          ],
+          "show": false
+        },
+        "showHeader": true
+      },
+      "pluginVersion": "11.6.0",
+      "targets": [
+        {
+          "datasource": {
+            "type": "postgres",
+            "uid": "grafana-postgres"
+          },
+          "format": "table",
+          "rawSql": "WITH latest AS (\n  SELECT\n    n.name AS agent,\n    d.target,\n    d.method,\n    (n.name || ' / ' || d.method) AS agent_method,\n    CASE\n      WHEN d.ok THEN 'ok'\n      WHEN d.error_type IS NULL OR d.error_type = '' THEN 'fail'\n      ELSE d.error_type\n    END AS status,\n    d.checked_at,\n    row_number() OVER (\n      PARTITION BY n.name, d.target, d.method\n      ORDER BY d.checked_at DESC\n    ) AS rn\n  FROM dpi_probe_results d\n  JOIN probe_nodes n ON n.id = d.probe_node_id\n  WHERE n.name ~ ${agent:sqlstring}\n    AND d.method ~ ${method:sqlstring}\n    AND d.target ~ ${target:sqlstring}\n    AND $__timeFilter(d.checked_at)\n)\nSELECT\n  target,\n  agent_method,\n  status,\n  checked_at\nFROM latest\nWHERE rn = 1\nORDER BY\n  target,\n  agent_method;",
+          "refId": "A"
+        }
+      ],
+      "title": "Diagnostic matrix",
+      "type": "table"
+    },
+    {
+      "datasource": {
         "type": "prometheus",
         "uid": "PBFA97CFB590B2093"
       },
@@ -389,9 +665,9 @@
       },
       "gridPos": {
         "h": 8,
-        "w": 12,
-        "x": 12,
-        "y": 5
+        "w": 24,
+        "x": 0,
+        "y": 24
       },
       "id": 3,
       "options": {
@@ -414,157 +690,13 @@
             "type": "prometheus",
             "uid": "PBFA97CFB590B2093"
           },
-          "expr": "rknmon_dpi_check_latency_ms{agent=~\"$agent\"}",
-          "legendFormat": "{{checker}} {{target}} {{method}}",
+          "expr": "rknmon_dpi_check_latency_ms{agent=~\"$agent\", method=~\"$method\", target=~\"$target\"}",
+          "legendFormat": "{{agent}} {{target}} {{method}}",
           "refId": "A"
         }
       ],
-      "title": "DPI latency",
+      "title": "DPI latency over time",
       "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 13
-      },
-      "id": 4,
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
-        "showHeader": true
-      },
-      "pluginVersion": "11.6.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "PBFA97CFB590B2093"
-          },
-          "expr": "rknmon_dpi_check_status{agent=~\"$agent\"}",
-          "format": "table",
-          "instant": true,
-          "refId": "A"
-        }
-      ],
-      "title": "Current DPI check status",
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "job": true,
-              "instance": true
-            },
-            "indexByName": {},
-            "renameByName": {
-              "Value": "ok"
-            }
-          }
-        }
-      ],
-      "type": "table"
-    },
-    {
-      "datasource": {
-        "type": "postgres",
-        "uid": "grafana-postgres"
-      },
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            },
-            "inspect": false
-          },
-          "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 10,
-        "w": 24,
-        "x": 0,
-        "y": 23
-      },
-      "id": 5,
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "countRows": false,
-          "fields": "",
-          "reducer": [
-            "sum"
-          ],
-          "show": false
-        },
-        "showHeader": true
-      },
-      "pluginVersion": "11.6.0",
-      "targets": [
-        {
-          "datasource": {
-            "type": "postgres",
-            "uid": "grafana-postgres"
-          },
-          "format": "table",
-          "rawSql": "SELECT n.name AS agent, d.checker, d.target, d.method, d.ok, d.latency_ms, d.http_status, d.error_type, d.checked_at FROM dpi_probe_results d JOIN probe_nodes n ON n.id = d.probe_node_id WHERE n.name ~ '${agent:regex}' ORDER BY d.checked_at DESC LIMIT 100",
-          "refId": "A"
-        }
-      ],
-      "title": "Latest DPI rows from DB",
-      "type": "table"
     }
   ],
   "refresh": "30s",
