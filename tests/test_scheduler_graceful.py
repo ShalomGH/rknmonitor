@@ -2,7 +2,7 @@ import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 import asyncio
 
-from rknmon.probes.scheduler import probe_job, shutdown_scheduler, start_scheduler
+from rknmon.probes.scheduler import probe_job, shutdown_scheduler
 
 
 @pytest.mark.asyncio

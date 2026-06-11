@@ -14,7 +14,8 @@ COPY src/ ./src/
 COPY static/ ./static/
 COPY templates/ ./templates/
 COPY scripts/ ./scripts/
-COPY migrations/ ./migrations/
+COPY deploy/ ./deploy/
+COPY docker-compose.agent.public.yml ./docker-compose.agent.public.yml
 COPY alembic.ini .
 COPY README.md .
 COPY RUNBOOK.md .

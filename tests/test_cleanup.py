@@ -1,6 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
-import asyncio
+from unittest.mock import AsyncMock, patch
 
 from rknmon.probes.cleanup import cleanup_old_records, parse_rowcount
 from rknmon.config.settings import settings

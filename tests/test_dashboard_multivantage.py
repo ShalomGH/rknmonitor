@@ -1,4 +1,3 @@
-import pytest
 from unittest.mock import AsyncMock, patch
 
 from rknmon.api.main import app

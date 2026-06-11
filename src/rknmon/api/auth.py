@@ -3,7 +3,18 @@ from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 from rknmon.config.settings import settings
 
-EXEMPT_PATHS = {"/", "/health", "/metrics", "/openapi.json", "/docs", "/redoc", "/ui/dashboard", "/ui/dashboard_data"}
+EXEMPT_PATHS = {
+    "/",
+    "/health",
+    "/metrics",
+    "/openapi.json",
+    "/docs",
+    "/redoc",
+    "/ui/dashboard",
+    "/ui/dashboard_data",
+    "/install-agent.sh",
+    "/docker-compose.agent.public.yml",
+}
 EXEMPT_PREFIXES = ("/ui/", "/static/", "/agent/")
 
 class APIKeyMiddleware(BaseHTTPMiddleware):

@@ -1,4 +1,3 @@
-import pytest
 from rknmon.probes.classifier import classify
 
 class TestClassify:

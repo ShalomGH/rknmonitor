@@ -1,4 +1,3 @@
-import pytest
 from fastapi.testclient import TestClient
 from rknmon.api.main import app
 
@@ -39,3 +38,14 @@ class TestAuthMiddleware:
     def test_openapi_public(self):
         response = client.get("/openapi.json")
         assert response.status_code == 200
+
+    def test_public_agent_install_artifacts(self):
+        script = client.get("/install-agent.sh")
+        assert script.status_code == 200
+        assert "install-agent.sh --central" in script.text
+        assert "NODE_API_KEY" in script.text
+
+        compose = client.get("/docker-compose.agent.public.yml")
+        assert compose.status_code == 200
+        assert "rknmon-agent" in compose.text
+        assert "build:" not in compose.text

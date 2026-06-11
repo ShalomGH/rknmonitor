@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from pathlib import Path
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from prometheus_client import make_asgi_app, Counter, Histogram
@@ -22,6 +22,8 @@ REQUEST_DURATION = Histogram("http_request_duration_seconds", "HTTP request dura
 BASE_DIR = Path(__file__).resolve().parent.parent.parent.parent
 TEMPLATES_DIR = BASE_DIR / "templates"
 STATIC_DIR = BASE_DIR / "static"
+DEPLOY_DIR = BASE_DIR / "deploy"
+PUBLIC_AGENT_COMPOSE = BASE_DIR / "docker-compose.agent.public.yml"
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 
@@ -75,6 +77,22 @@ async def health():
         return {"status": "ok", "db": "ok"}
     except Exception as e:
         return {"status": "error", "db": str(e)}
+
+@app.get("/install-agent.sh", include_in_schema=False)
+async def install_agent_script():
+    return FileResponse(
+        DEPLOY_DIR / "install-agent.sh",
+        media_type="text/x-shellscript; charset=utf-8",
+        filename="install-agent.sh",
+    )
+
+@app.get("/docker-compose.agent.public.yml", include_in_schema=False)
+async def public_agent_compose():
+    return FileResponse(
+        PUBLIC_AGENT_COMPOSE,
+        media_type="application/yaml; charset=utf-8",
+        filename="docker-compose.agent.public.yml",
+    )
 
 @app.get("/")
 async def root():

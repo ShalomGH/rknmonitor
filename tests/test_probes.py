@@ -1,5 +1,4 @@
 import pytest
-import asyncio
 from rknmon.probes.http_probe import probe_http
 from rknmon.probes.dns_probe import probe_dns
 

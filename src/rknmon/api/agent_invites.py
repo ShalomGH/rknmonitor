@@ -33,7 +33,7 @@ from typing import Optional
 import asyncpg
 
 from rknmon.config.settings import settings
-from rknmon.db import execute, fetch, fetchrow
+from rknmon.db import fetch, fetchrow
 from rknmon.models.schemas import (
     AgentBootstrapOut,
     AgentInviteCreateIn,
@@ -270,7 +270,7 @@ async def bootstrap_agent(
     pool = await get_pool()
     async with pool.acquire() as conn:
         async with conn.transaction():
-            node_id = await _txn(conn)
+            await _txn(conn)
 
     interval = int(getattr(settings, "probe_interval_seconds", 300) or 300)
     install_url = f"{settings.public_base_url.rstrip('/')}/install-agent.sh"

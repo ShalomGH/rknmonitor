@@ -1,5 +1,5 @@
 import os
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -10,7 +10,6 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 from rknmon.api.main import app  # noqa: E402
 from rknmon.config import settings as settings_module  # noqa: E402
-from rknmon.models.schemas import AgentInviteCreateIn  # noqa: E402
 
 client = TestClient(app)
 
