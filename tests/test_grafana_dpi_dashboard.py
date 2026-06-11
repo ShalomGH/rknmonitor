@@ -148,6 +148,12 @@ def test_dpi_dashboard_has_operator_table_from_postgres():
     for column in expected_columns:
         assert column in sql
     assert "ORDER BY" in sql
+    assert "n.name IN (${agent:sqlstring})" in sql
+    assert "d.method IN (${method:sqlstring})" in sql
+    assert "d.target IN (${target:sqlstring})" in sql
+    assert "~ ${agent:sqlstring}" not in sql
+    assert "~ ${method:sqlstring}" not in sql
+    assert "~ ${target:sqlstring}" not in sql
 
 
 def test_dpi_dashboard_has_diagnostic_matrix_from_postgres():
@@ -161,6 +167,12 @@ def test_dpi_dashboard_has_diagnostic_matrix_from_postgres():
     assert "agent_method" in sql
     assert "status" in sql
     assert "row_number()" in sql.lower()
+    assert "n.name IN (${agent:sqlstring})" in sql
+    assert "d.method IN (${method:sqlstring})" in sql
+    assert "d.target IN (${target:sqlstring})" in sql
+    assert "~ ${agent:sqlstring}" not in sql
+    assert "~ ${method:sqlstring}" not in sql
+    assert "~ ${target:sqlstring}" not in sql
 
 
 def test_dpi_dashboard_has_history_panels():
