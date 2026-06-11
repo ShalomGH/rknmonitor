@@ -409,6 +409,60 @@
         "skipUrlSync": false,
         "sort": 1,
         "type": "query"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": ".*"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "definition": "label_values(rknmon_dpi_check_status{agent=~\"$agent\"}, method)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Method",
+        "multi": false,
+        "name": "method",
+        "options": [],
+        "query": {
+          "query": "label_values(rknmon_dpi_check_status{agent=~\"$agent\"}, method)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": false,
+          "text": "All",
+          "value": ".*"
+        },
+        "datasource": {
+          "type": "prometheus",
+          "uid": "PBFA97CFB590B2093"
+        },
+        "definition": "label_values(rknmon_dpi_check_status{agent=~\"$agent\", method=~\"$method\"}, target)",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Target",
+        "multi": false,
+        "name": "target",
+        "options": [],
+        "query": {
+          "query": "label_values(rknmon_dpi_check_status{agent=~\"$agent\", method=~\"$method\"}, target)",
+          "refId": "PrometheusVariableQueryEditor-VariableQuery"
+        },
+        "refresh": 1,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
       }
     ]
   },
