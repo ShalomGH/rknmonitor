@@ -13,6 +13,7 @@ __pycache__/
 .ruff_cache/
 *.log
 pgdata/
+.worktrees/
 
 # Local secrets / generated TLS material
 monitoring/nginx/nginx.conf
