@@ -180,7 +180,7 @@ LOG_LEVEL=INFO
 ```bash
 XRAY_ENABLED=true
 XRAY_SUBSCRIPTION_URLS=https://sub1.example/xxx,https://sub2.example/yyy
-XRAY_SUBSCRIPTION_NAMES=rpi-main,rpi-onlycry       # safe labels для Grafana
+XRAY_SUBSCRIPTION_NAMES=rpi-main,rpi-secondary     # safe labels для Grafana
 XRAY_TEST_URL=https://cp.cloudflare.com/
 XRAY_SOCKS_START_PORT=11001
 XRAY_CONFIG_PATH=/config/xray.generated.json
@@ -206,7 +206,7 @@ XRAY_READY_TIMEOUT_SECONDS=90
 ### Что работает на малине
 
 - Контейнеры `rknmon-agent` + `rknmon-xray` (`teddysun/xray:latest`, ARMv7).
-- Сейчас 2 подписки: `rpi-main`, `rpi-onlycry`. Всего 12 профилей, из них 10 OK, 2 failed (`xhttp-legacy`).
+- Сейчас 2 примерные подписки: `rpi-main`, `rpi-secondary`. Количество профилей и статусы зависят от локальной `.env.xray`.
 - SOCKS-порты: `11001..11012` на `127.0.0.1`.
 - Проба идёт через `curl --proxy socks5h://127.0.0.1:<port> https://cp.cloudflare.com/`.
 

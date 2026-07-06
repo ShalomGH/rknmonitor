@@ -23,7 +23,7 @@ def test_agent_xray_results_ingest_with_node_api_key(mock_fetchrow, mock_execute
                 "security": "reality",
                 "sni": "www.microsoft.com",
                 "fingerprint": "chrome",
-                "server_host": "sub.only-cry.space",
+                "server_host": "vpn-node.example",
                 "server_port": 443,
                 "socks_port": 11001,
                 "test_url": "https://cp.cloudflare.com/",

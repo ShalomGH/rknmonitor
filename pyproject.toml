@@ -10,6 +10,7 @@ requires-python = ">=3.12"
 dependencies = [
   "aiohttp",
   "aiodns",
+  "apscheduler",
   "asyncpg",
   "fastapi",
   "jinja2",
@@ -19,6 +20,16 @@ dependencies = [
   "slowapi",
   "starlette",
   "uvicorn",
+]
+
+[project.optional-dependencies]
+dev = [
+  "httpx",
+  "mypy",
+  "pytest",
+  "pytest-asyncio",
+  "pytest-cov",
+  "ruff",
 ]
 
 [project.scripts]

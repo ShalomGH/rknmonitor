@@ -4,8 +4,7 @@ import logging
 
 from rknmon.agent.client import AgentClient
 from rknmon.agent.config import AgentSettings
-from rknmon.agent.xray import load_profiles_from_urls
-from rknmon.agent.runner import run_dpi_probe_cycle, run_probe_cycle, run_xray_probe_cycle, write_xray_config
+from rknmon.agent.runner import run_dpi_probe_cycle, run_probe_cycle, run_xray_probe_cycle
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -80,13 +79,6 @@ async def main_async(argv=None):
                 await run_probe_cycle(client)
             except Exception:
                 logging.exception("target probe cycle failed")
-
-    if args.write_xray_config and settings.xray_subscription_url_list:
-        profiles = await load_profiles_from_urls(
-            settings.xray_subscription_url_list,
-            subscription_names=settings.xray_subscription_name_list,
-        )
-        write_xray_config(profiles, settings.xray_config_path, settings.xray_socks_start_port)
 
     if args.once:
         await run_enabled_cycles()

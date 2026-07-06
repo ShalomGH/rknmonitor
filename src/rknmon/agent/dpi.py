@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
+import re
 import socket
 import time
 from dataclasses import dataclass
@@ -64,36 +66,67 @@ def _classify_error(error: str | None) -> str | None:
     return "probe_failed"
 
 
+BLOCKPAGE_PATTERNS = [
+    re.compile(pattern, re.IGNORECASE)
+    for pattern in (
+        r"\b451\b",
+        r"access\s+(?:to\s+)?(?:denied|restricted)",
+        r"blocked\s+by",
+        r"internet\s+censorship",
+        r"роскомнадзор|ркн",
+        r"доступ\s+(?:к\s+)?(?:информационному\s+ресурсу\s+)?ограничен",
+        r"доступ\s+запрещ[её]н",
+        r"заблокирован",
+        r"единый\s+реестр",
+    )
+]
+
+
+def _detect_blockpage(status: int, body: str) -> str | None:
+    if status in {403, 451}:
+        return "http_block"
+    sample = body[:8192]
+    for pattern in BLOCKPAGE_PATTERNS:
+        if pattern.search(sample):
+            return "blockpage_signature"
+    return None
+
+
 async def _http_head(url: str, timeout_seconds: float) -> dict[str, Any]:
+    """Probe HTTP reachability and detect common ISP/RKN block pages.
+
+    Earlier versions treated any HTTP status <500 as OK. That hides the most
+    common failure mode: provider block pages return 200/302/403/451, so the
+    dashboard stayed green while real devices in the same network were blocked.
+    We now fetch a small body sample and classify block-page signatures.
+    """
     started = time.monotonic()
     timeout = aiohttp.ClientTimeout(total=timeout_seconds)
-    headers = {"User-Agent": "rknmon-dpi-checker/0.1"}
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; rknmon-dpi-checker/0.2)",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Range": "bytes=0-8191",
+    }
     try:
-        async with aiohttp.ClientSession(timeout=timeout, trust_env=True, headers=headers) as session:
-            try:
-                async with session.head(url, allow_redirects=True) as resp:
-                    await resp.read()
-                    latency_ms = int((time.monotonic() - started) * 1000)
-                    return {
-                        "ok": 200 <= resp.status < 500,
-                        "latency_ms": latency_ms,
-                        "http_status": resp.status,
-                        "error_type": None,
-                        "error": None,
-                    }
-            except aiohttp.ClientResponseError:
-                raise
-            except Exception:
-                async with session.get(url, allow_redirects=True) as resp:
-                    await resp.read()
-                    latency_ms = int((time.monotonic() - started) * 1000)
-                    return {
-                        "ok": 200 <= resp.status < 500,
-                        "latency_ms": latency_ms,
-                        "http_status": resp.status,
-                        "error_type": None,
-                        "error": None,
-                    }
+        async with aiohttp.ClientSession(timeout=timeout, trust_env=False, headers=headers) as session:
+            async with session.get(url, allow_redirects=True) as resp:
+                raw = await resp.content.read(8192)
+                text = raw.decode(errors="replace")
+                latency_ms = int((time.monotonic() - started) * 1000)
+                block_error = _detect_blockpage(resp.status, text)
+                ok = 200 <= resp.status < 400 and block_error is None
+                return {
+                    "ok": ok,
+                    "latency_ms": latency_ms,
+                    "http_status": resp.status,
+                    "error_type": block_error if block_error else (None if ok else "http_status"),
+                    "error": None if ok else f"HTTP {resp.status}",
+                    "details": {
+                        "final_url": str(resp.url),
+                        "body_sample": text[:500],
+                        "block_signature": block_error,
+                    },
+                }
     except Exception as exc:
         latency_ms = int((time.monotonic() - started) * 1000)
         error = str(exc) or exc.__class__.__name__
@@ -103,6 +136,7 @@ async def _http_head(url: str, timeout_seconds: float) -> dict[str, Any]:
             "http_status": None,
             "error_type": _classify_error(error),
             "error": error,
+            "details": {"exception": exc.__class__.__name__},
         }
 
 
@@ -123,7 +157,7 @@ async def probe_cidrwhitelist(
                     "http_status": res["http_status"],
                     "error_type": res["error_type"],
                     "error": res["error"],
-                    "details": {"url": url, "group": group},
+                    "details": {"url": url, "group": group, **res.get("details", {})},
                 }
             )
     whitelist_ok = any(r["ok"] for r in results if r["method"] == "whitelisted")
@@ -166,6 +200,21 @@ async def _resolve_doh(host: str, timeout_seconds: float) -> list[str]:
     return sorted({a["data"] for a in data.get("Answer", []) if a.get("type") == 1 and a.get("data")})
 
 
+def _looks_block_ip(ip: str) -> bool:
+    try:
+        addr = ipaddress.ip_address(ip)
+    except ValueError:
+        return True
+    return (
+        addr.is_private
+        or addr.is_loopback
+        or addr.is_link_local
+        or addr.is_multicast
+        or addr.is_reserved
+        or addr.is_unspecified
+    )
+
+
 async def probe_dns_interference(targets: list[DpiTarget], timeout_seconds: float) -> list[dict[str, Any]]:
     results: list[dict[str, Any]] = []
     for target in targets:
@@ -179,12 +228,25 @@ async def probe_dns_interference(targets: list[DpiTarget], timeout_seconds: floa
                 _resolve_system(target.host, timeout_seconds),
                 _resolve_doh(target.host, timeout_seconds),
             )
-            details.update({"system_ips": system_ips, "doh_ips": doh_ips})
-            dns_overlap = bool(set(system_ips) & set(doh_ips))
-            details["dns_overlap"] = dns_overlap
-            ok = bool(system_ips) and bool(doh_ips)
-            if not ok:
+            system_set = set(system_ips)
+            doh_set = set(doh_ips)
+            dns_overlap = bool(system_set & doh_set)
+            block_ips = sorted(ip for ip in system_set if _looks_block_ip(ip))
+            details.update(
+                {
+                    "system_ips": system_ips,
+                    "doh_ips": doh_ips,
+                    "dns_overlap": dns_overlap,
+                    "block_like_system_ips": block_ips,
+                }
+            )
+            if not system_ips or not doh_ips:
                 error_type = "dns_empty_response"
+            elif block_ips:
+                error_type = "dns_block_ip"
+            elif not dns_overlap:
+                error_type = "dns_mismatch"
+            ok = error_type is None
         except Exception as exc:
             error = str(exc) or exc.__class__.__name__
             error_type = _classify_error(error) or "dns_failed"

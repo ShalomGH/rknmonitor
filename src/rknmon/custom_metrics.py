@@ -1,5 +1,6 @@
 from __future__ import annotations
 import logging
+from collections import defaultdict
 from prometheus_client import Gauge, Counter, Info
 
 logger = logging.getLogger(__name__)
@@ -60,19 +61,34 @@ def record_probe_latency(target_id: str, domain: str, probe_type: str, ms: float
 XRAY_PROFILE_STATUS_GAUGE = Gauge(
     "rknmon_xray_profile_status",
     "Latest Xray profile probe status: 1 ok, 0 failed",
-    ["agent", "subscription", "profile", "protocol", "transport", "server"],
+    ["agent", "subscription", "profile", "protocol", "transport", "security", "server"],
 )
 
 XRAY_PROFILE_LATENCY_GAUGE = Gauge(
     "rknmon_xray_profile_latency_ms",
     "Latest Xray profile probe latency in milliseconds",
-    ["agent", "subscription", "profile", "protocol", "transport", "server"],
+    ["agent", "subscription", "profile", "protocol", "transport", "security", "server"],
 )
 
 XRAY_PROFILE_ERROR_COUNTER = Counter(
     "rknmon_xray_profile_errors_total",
     "Xray profile probe errors by type",
-    ["agent", "subscription", "profile", "protocol", "transport", "server", "error_type"],
+    ["agent", "subscription", "profile", "protocol", "transport", "security", "server", "error_type"],
+)
+
+XrayProfileLabel = tuple[str, str, str, str, str, str, str]
+_XRAY_PROFILE_LABELS_BY_AGENT_SUB: dict[tuple[str, str], set[XrayProfileLabel]] = defaultdict(set)
+
+XRAY_SUBSCRIPTION_UP_GAUGE = Gauge(
+    "rknmon_xray_subscription_up",
+    "Latest Xray subscription fetch outcome: 1 ok, 0 failed",
+    ["agent", "subscription"],
+)
+
+XRAY_SUBSCRIPTION_ERROR_COUNTER = Counter(
+    "rknmon_xray_subscription_errors_total",
+    "Xray subscription fetch errors by type (per agent, per subscription)",
+    ["agent", "subscription", "error_type"],
 )
 
 DPI_CHECK_STATUS_GAUGE = Gauge(
@@ -101,6 +117,7 @@ def record_xray_probe(
     profile: str,
     protocol: str,
     transport: str | None,
+    security: str | None,
     server: str,
     ok: bool,
     latency_ms: float | None,
@@ -112,13 +129,64 @@ def record_xray_probe(
         "profile": profile,
         "protocol": protocol,
         "transport": transport or "unknown",
+        "security": security or "none",
         "server": server,
     }
+    label_tuple: XrayProfileLabel = (
+        labels["agent"],
+        labels["subscription"],
+        labels["profile"],
+        labels["protocol"],
+        labels["transport"],
+        labels["security"],
+        labels["server"],
+    )
+    _XRAY_PROFILE_LABELS_BY_AGENT_SUB[(labels["agent"], labels["subscription"])].add(label_tuple)
     XRAY_PROFILE_STATUS_GAUGE.labels(**labels).set(1 if ok else 0)
     if latency_ms is not None:
         XRAY_PROFILE_LATENCY_GAUGE.labels(**labels).set(latency_ms)
     if not ok:
         XRAY_PROFILE_ERROR_COUNTER.labels(**labels, error_type=error_type or "unknown").inc()
+
+
+def prune_xray_profile_metrics(agent: str, subscription: str | None, current: set[XrayProfileLabel]) -> None:
+    """Remove profile gauges that disappeared from the latest agent batch.
+
+    prometheus_client keeps every Gauge label ever touched for the lifetime of
+    the process. Without explicit removal, deleted/dead subscription profiles
+    continue to be exported as if they were still alive.
+    """
+    subscription_label = subscription or "default"
+    key = (agent, subscription_label)
+    stale = _XRAY_PROFILE_LABELS_BY_AGENT_SUB[key] - current
+    for label_tuple in stale:
+        try:
+            XRAY_PROFILE_STATUS_GAUGE.remove(*label_tuple)
+            XRAY_PROFILE_LATENCY_GAUGE.remove(*label_tuple)
+        except KeyError:
+            pass
+    _XRAY_PROFILE_LABELS_BY_AGENT_SUB[key] = set(current)
+
+
+def clear_xray_profile_metrics(agent: str, subscription: str | None) -> None:
+    subscription_label = subscription or "default"
+    prune_xray_profile_metrics(agent, subscription_label, set())
+
+
+def record_subscription_health(
+    *,
+    agent: str,
+    subscription: str,
+    ok: bool,
+    http_status: int | None,
+    error_type: str | None,
+) -> None:
+    labels = {"agent": agent, "subscription": subscription}
+    XRAY_SUBSCRIPTION_UP_GAUGE.labels(**labels).set(1 if ok else 0)
+    if not ok:
+        XRAY_SUBSCRIPTION_ERROR_COUNTER.labels(
+            **labels, error_type=error_type or "unknown"
+        ).inc()
 
 
 def record_dpi_probe(

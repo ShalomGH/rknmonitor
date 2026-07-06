@@ -170,6 +170,26 @@ ALTER TABLE agent_invites ADD COLUMN IF NOT EXISTS max_uses INTEGER NOT NULL DEF
 ALTER TABLE agent_invites ADD COLUMN IF NOT EXISTS uses INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE agent_invites ADD COLUMN IF NOT EXISTS note TEXT;
 ALTER TABLE agent_invites ADD COLUMN IF NOT EXISTS created_by TEXT;
+
+CREATE TABLE IF NOT EXISTS xray_subscription_health (
+    id BIGSERIAL PRIMARY KEY,
+    probe_node_id INTEGER REFERENCES probe_nodes(id) ON DELETE CASCADE,
+    subscription_name TEXT NOT NULL,
+    subscription_url TEXT NOT NULL,
+    ok BOOLEAN NOT NULL,
+    http_status INTEGER,
+    error_type TEXT,
+    error TEXT,
+    profiles_count INTEGER NOT NULL DEFAULT 0,
+    checked_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_xray_subscription_health_node_checked
+    ON xray_subscription_health(probe_node_id, checked_at DESC);
+CREATE INDEX IF NOT EXISTS idx_xray_subscription_health_name_checked
+    ON xray_subscription_health(subscription_name, checked_at DESC);
+CREATE INDEX IF NOT EXISTS idx_xray_subscription_health_ok
+    ON xray_subscription_health(ok);
 """
 
 async def init_schema() -> None:

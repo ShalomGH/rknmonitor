@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import asyncio
 import base64
 import json
+import logging
 import re
 from dataclasses import dataclass, field
 from typing import Any
@@ -132,18 +134,126 @@ def _parse_standard_link(raw_url: str) -> XrayProfile | None:
 
 
 async def load_profiles_from_urls(
-    subscription_urls: list[str], subscription_names: list[str] | None = None
+    subscription_urls: list[str],
+    subscription_names: list[str] | None = None,
 ) -> list[XrayProfile]:
+    """Backwards-compatible: returns just the parsed profiles.
+
+    New callers should use :func:`load_profiles_with_status` to also get
+    per-subscription health (which URL failed, with what error).
+    """
+    profiles, _statuses = await load_profiles_with_status(
+        subscription_urls, subscription_names
+    )
+    return profiles
+
+
+async def load_profiles_with_status(
+    subscription_urls: list[str],
+    subscription_names: list[str] | None = None,
+) -> tuple[list[XrayProfile], list[dict]]:
+    """Load profiles from each subscription URL individually.
+
+    A failure in one provider MUST NOT take down the whole cycle. The
+    per-subscription outcome is returned alongside the merged profile list
+    so the agent can report it to the central server.
+
+    Returns:
+        (profiles, statuses) where each status entry is:
+            {
+                "name": str,                 # local key, used for logs
+                "subscription_name": str,    # matches API schema
+                "url": str,
+                "subscription_url": str,     # matches API schema
+                "ok": bool,
+                "http_status": int | None,
+                "error_type": str | None,   # e.g. "timeout", "connection_error", "http_403"
+                "error": str | None,        # short human-readable detail
+                "profiles_count": int,
+            }
+    """
     profiles: list[XrayProfile] = []
+    statuses: list[dict] = []
     timeout = aiohttp.ClientTimeout(total=30)
     names = subscription_names or []
     async with aiohttp.ClientSession(timeout=timeout) as session:
         for idx, url in enumerate(subscription_urls):
-            subscription_name = names[idx] if idx < len(names) and names[idx] else f"sub-{idx + 1}"
-            async with session.get(url) as resp:
-                resp.raise_for_status()
-                profiles.extend(parse_subscription_text(await resp.text(), subscription_name=subscription_name))
-    return profiles
+            name = (
+                names[idx]
+                if idx < len(names) and names[idx]
+                else f"sub-{idx + 1}"
+            )
+            status: dict = {
+                "name": name,
+                "subscription_name": name,
+                "url": url,
+                "subscription_url": url,
+                "ok": False,
+                "http_status": None,
+                "error_type": None,
+                "error": None,
+                "profiles_count": 0,
+            }
+            try:
+                async with session.get(url) as resp:
+                    status["http_status"] = resp.status
+                    if resp.status >= 400:
+                        status["error_type"] = f"http_{resp.status}"
+                        status["error"] = f"HTTP {resp.status}"
+                        statuses.append(status)
+                        logging.warning(
+                            "xray: subscription %s unavailable: HTTP %s url=%s",
+                            name,
+                            resp.status,
+                            url,
+                        )
+                        continue
+                    body = await resp.text()
+            except asyncio.TimeoutError:
+                status["error_type"] = "timeout"
+                status["error"] = "fetch timeout"
+                statuses.append(status)
+                logging.warning(
+                    "xray: subscription %s unavailable: timeout url=%s",
+                    name,
+                    url,
+                )
+                continue
+            except aiohttp.ClientConnectionError as exc:
+                status["error_type"] = "connection_error"
+                status["error"] = str(exc)[:200]
+                statuses.append(status)
+                logging.warning(
+                    "xray: subscription %s unavailable: connection error url=%s err=%s",
+                    name,
+                    url,
+                    exc,
+                )
+                continue
+            except aiohttp.ClientError as exc:
+                status["error_type"] = "http_error"
+                status["error"] = str(exc)[:200]
+                statuses.append(status)
+                logging.warning(
+                    "xray: subscription %s unavailable: http error url=%s err=%s",
+                    name,
+                    url,
+                    exc,
+                )
+                continue
+
+            parsed = parse_subscription_text(body, subscription_name=name)
+            status["ok"] = True
+            status["profiles_count"] = len(parsed)
+            statuses.append(status)
+            profiles.extend(parsed)
+            logging.info(
+                "xray: subscription %s loaded %d profiles url=%s",
+                name,
+                len(parsed),
+                url,
+            )
+    return profiles, statuses
 
 
 def _stream_settings(profile: XrayProfile) -> dict[str, Any]:

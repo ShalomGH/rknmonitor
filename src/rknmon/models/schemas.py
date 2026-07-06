@@ -154,6 +154,20 @@ class AgentHeartbeatIn(BaseModel):
     public_ip: Optional[str] = None
 
 
+class SubscriptionHealthIn(BaseModel):
+    subscription_name: str
+    subscription_url: str
+    ok: bool
+    http_status: Optional[int] = None
+    error_type: Optional[str] = None
+    error: Optional[str] = None
+    profiles_count: int = 0
+
+
+class SubscriptionHealthBatchIn(BaseModel):
+    items: list[SubscriptionHealthIn]
+
+
 class Event(BaseModel):
     id: Optional[int] = None
     target_id: int

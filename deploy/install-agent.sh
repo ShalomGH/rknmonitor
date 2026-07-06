@@ -29,6 +29,7 @@ ASSUME_YES=0
 SKIP_DOCKER=0
 INSTALL_DIR="/opt/rknmon-agent"
 COMPOSE_FILE_URL_OVERRIDE=""
+AGENT_IMAGE=""
 
 print_usage() {
   cat <<'USAGE'
@@ -50,6 +51,8 @@ Optional:
   --skip-docker         Assume Docker is already installed
   --compose-url URL     Override docker-compose.agent.public.yml download URL
                         (default: <central>/docker-compose.agent.public.yml)
+  --agent-image IMAGE   Agent image to pull (default: compose file default,
+                        usually ghcr.io/<owner>/rknmon-agent:stable)
 
 Examples:
   install-agent.sh --central https://mon.example.com --token abcdef1234
@@ -72,6 +75,7 @@ parse_args() {
       --yes)                ASSUME_YES=1; shift;;
       --skip-docker)        SKIP_DOCKER=1; shift;;
       --compose-url)        COMPOSE_FILE_URL_OVERRIDE="${2:-}"; shift 2;;
+      --agent-image)        AGENT_IMAGE="${2:-}"; shift 2;;
       -h|--help)            print_usage; exit 0;;
       *) err "Unknown argument: $1"; print_usage; exit 2;;
     esac
@@ -200,6 +204,7 @@ bootstrap() {
   log "Got node_api_key for agent '$agent_name' (modes: $modes_csv)"
 
   write_env_agent "$central_url" "$node_api_key" "$agent_name"
+  write_compose_env "$agent_name"
   write_env_xray_from_invite "$resp"
 
   # Best-effort cleanup: keep token in memory only.
@@ -247,6 +252,20 @@ write_env_agent() {
     printf 'LOG_LEVEL=INFO\n'
   } > .env.agent
   chmod 600 .env.agent
+}
+
+write_compose_env() {
+  local agent_name="$1"
+  # docker compose interpolation reads ./.env, not env_file. Keep non-secret
+  # image/container-name knobs here; secrets stay in .env.agent/.env.xray.
+  log "Writing compose .env"
+  {
+    if [[ -n "$AGENT_IMAGE" ]]; then
+      printf 'RKNMON_AGENT_IMAGE=%s\n' "$AGENT_IMAGE"
+    fi
+    printf 'AGENT_NAME=%s\n' "$agent_name"
+  } > .env
+  chmod 0644 .env
 }
 
 write_env_xray_from_invite() {

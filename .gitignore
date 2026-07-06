@@ -20,3 +20,5 @@ monitoring/nginx/nginx.conf
 monitoring/nginx/ssl/*.pem
 monitoring/nginx/ssl/*.key
 monitoring/nginx/ssl/*.crt
+*.bak
+*.bak.*

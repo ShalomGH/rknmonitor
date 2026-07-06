@@ -4,13 +4,22 @@ import os
 from fastapi import APIRouter, HTTPException, Request
 
 from rknmon.agent.config import AgentSettings
-from rknmon.custom_metrics import record_dpi_probe, record_probe_latency, record_xray_probe
+from rknmon.custom_metrics import (
+    XrayProfileLabel,
+    clear_xray_profile_metrics,
+    prune_xray_profile_metrics,
+    record_dpi_probe,
+    record_probe_latency,
+    record_subscription_health,
+    record_xray_probe,
+)
 from rknmon.db import execute, fetch, fetchrow
 from rknmon.models.schemas import (
     AgentHeartbeatIn,
     AgentProbeBatchIn,
     AgentRegisterIn,
     DpiProbeBatchIn,
+    SubscriptionHealthBatchIn,
     XrayProbeBatchIn,
 )
 from rknmon.probes.evaluator import evaluate_targets
@@ -233,6 +242,7 @@ async def ingest_probe_batch(request: Request, payload: AgentProbeBatchIn):
 @router.post("/xray-results")
 async def ingest_xray_probe_batch(request: Request, payload: XrayProbeBatchIn):
     node = await _get_probe_node(request)
+    current_by_subscription: dict[str, set[XrayProfileLabel]] = {}
     for probe in payload.results:
         await execute(
             """
@@ -263,17 +273,31 @@ async def ingest_xray_probe_batch(request: Request, payload: XrayProbeBatchIn):
             probe.error_type,
             probe.error,
         )
+        subscription = probe.subscription_name or "default"
+        label_tuple: XrayProfileLabel = (
+            node["name"],
+            subscription,
+            probe.profile_id,
+            probe.protocol,
+            probe.transport or "unknown",
+            probe.security or "none",
+            probe.server_host,
+        )
+        current_by_subscription.setdefault(subscription, set()).add(label_tuple)
         record_xray_probe(
             agent=node["name"],
             subscription=probe.subscription_name,
             profile=probe.profile_id,
             protocol=probe.protocol,
             transport=probe.transport,
+            security=probe.security,
             server=probe.server_host,
             ok=probe.ok,
             latency_ms=probe.latency_ms,
             error_type=probe.error_type,
         )
+    for subscription, current in current_by_subscription.items():
+        prune_xray_profile_metrics(node["name"], subscription, current)
     return {"accepted": len(payload.results), "probe_node_id": node["id"]}
 
 
@@ -310,3 +334,43 @@ async def ingest_dpi_probe_batch(request: Request, payload: DpiProbeBatchIn):
             error_type=probe.error_type,
         )
     return {"accepted": len(payload.results), "probe_node_id": node["id"]}
+
+
+@router.post("/subscription-health")
+async def ingest_subscription_health(request: Request, payload: SubscriptionHealthBatchIn):
+    """Per-subscription fetch outcome reported by the agent.
+
+    Each cycle the agent tries every XRAY_SUBSCRIPTION_URL one by one and
+    records which provider succeeded / failed with what error. This is how
+    a flaky or dead subscription provider surfaces in the central DB/Grafana
+    without taking down the whole xray probe cycle.
+    """
+    node = await _get_probe_node(request)
+    for item in payload.items:
+        await execute(
+            """
+            INSERT INTO xray_subscription_health (
+                probe_node_id, subscription_name, subscription_url, ok,
+                http_status, error_type, error, profiles_count
+            )
+            VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+            """,
+            node["id"],
+            item.subscription_name,
+            item.subscription_url,
+            item.ok,
+            item.http_status,
+            item.error_type,
+            item.error,
+            item.profiles_count,
+        )
+        record_subscription_health(
+            agent=node["name"],
+            subscription=item.subscription_name,
+            ok=item.ok,
+            http_status=item.http_status,
+            error_type=item.error_type,
+        )
+        if not item.ok:
+            clear_xray_profile_metrics(node["name"], item.subscription_name)
+    return {"accepted": len(payload.items), "probe_node_id": node["id"]}

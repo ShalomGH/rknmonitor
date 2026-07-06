@@ -70,3 +70,20 @@ class AgentClient:
             async with session.post(f"{self.base_url}/agent/dpi-results", json={"results": results}) as resp:
                 resp.raise_for_status()
                 return await resp.json()
+
+    async def submit_subscription_health(self, items: list[dict]) -> dict:
+        """Report per-subscription fetch outcome to the central server.
+
+        ``items`` is a list of dicts produced by
+        :func:`rknmon.agent.xray.load_profiles_with_status`.
+
+        Returns the parsed JSON body. Raises on HTTP errors so the caller
+        can decide whether to log/retry — but xray cycle should never abort
+        on this.
+        """
+        async with aiohttp.ClientSession(headers=self._headers) as session:
+            async with session.post(
+                f"{self.base_url}/agent/subscription-health", json={"items": items}
+            ) as resp:
+                resp.raise_for_status()
+                return await resp.json()

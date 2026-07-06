@@ -184,7 +184,7 @@ pytest tests/                 # 59 тестов (актуально на 2026-06
 - ✅ Evaluator N+1 fixed (batch queries)
 - ✅ Advisory lock для schema init (race condition при старте)
 - ✅ **Xray monitoring** — agent+RPi sidecar запущен, `/agent/xray-results` принимает результаты, Grafana `rknmon-xray` (uid) с фильтрами `Agent`/`Subscription` готов
-- ✅ **Multi-subscription support** — `XRAY_SUBSCRIPTION_URLS` + `XRAY_SUBSCRIPTION_NAMES` (comma-separated, в одном порядке), 2 подписки активны на RPi: `rpi-main`, `rpi-onlycry` (12 профилей, 10 OK, 2 failed `xhttp-legacy`)
+- ✅ **Multi-subscription support** — `XRAY_SUBSCRIPTION_URLS` + `XRAY_SUBSCRIPTION_NAMES` (comma-separated, в одном порядке), примерные safe labels: `rpi-main`, `rpi-secondary`; реальные URL/статусы живут только в локальной `.env.xray`.
 - ✅ **Grafana provisioning editable + allowUiUpdates** — дашборды можно править из UI
 - ⚠️ **Списка реальных доменов нет** — в базе только `example.com` (тестовый)
 - ⚠️ **External vantage point не реализован** — нет подтверждения блокировки из-за рубежа

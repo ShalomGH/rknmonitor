@@ -54,6 +54,66 @@
           "text": "All",
           "value": "$__all"
         }
+      },
+      {
+        "name": "protocol",
+        "type": "query",
+        "label": "Protocol",
+        "datasource": {
+          "type": "postgres",
+          "uid": "grafana-postgres"
+        },
+        "query": "SELECT DISTINCT protocol FROM xray_probe_results ORDER BY 1",
+        "definition": "SELECT DISTINCT protocol FROM xray_probe_results ORDER BY 1",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "transport",
+        "type": "query",
+        "label": "Transport",
+        "datasource": {
+          "type": "postgres",
+          "uid": "grafana-postgres"
+        },
+        "query": "SELECT DISTINCT COALESCE(transport, 'unknown') FROM xray_probe_results ORDER BY 1",
+        "definition": "SELECT DISTINCT COALESCE(transport, 'unknown') FROM xray_probe_results ORDER BY 1",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
+      },
+      {
+        "name": "security",
+        "type": "query",
+        "label": "Security",
+        "datasource": {
+          "type": "postgres",
+          "uid": "grafana-postgres"
+        },
+        "query": "SELECT DISTINCT COALESCE(security, 'none') FROM xray_probe_results ORDER BY 1",
+        "definition": "SELECT DISTINCT COALESCE(security, 'none') FROM xray_probe_results ORDER BY 1",
+        "refresh": 1,
+        "includeAll": true,
+        "multi": true,
+        "sort": 1,
+        "current": {
+          "selected": true,
+          "text": "All",
+          "value": "$__all"
+        }
       }
     ]
   },
@@ -67,7 +127,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(rknmon_xray_profile_status{agent=~\"$agent\",subscription=~\"$subscription\"})",
+          "expr": "sum(rknmon_xray_profile_status{agent=~\"$agent\",subscription=~\"$subscription\",protocol=~\"$protocol\",transport=~\"$transport\",security=~\"$security\"})",
           "legendFormat": "OK",
           "refId": "A",
           "datasource": {
@@ -127,7 +187,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "count(rknmon_xray_profile_status{agent=~\"$agent\",subscription=~\"$subscription\"}) - sum(rknmon_xray_profile_status{agent=~\"$agent\",subscription=~\"$subscription\"})",
+          "expr": "count(rknmon_xray_profile_status{agent=~\"$agent\",subscription=~\"$subscription\",protocol=~\"$protocol\",transport=~\"$transport\",security=~\"$security\"}) - sum(rknmon_xray_profile_status{agent=~\"$agent\",subscription=~\"$subscription\",protocol=~\"$protocol\",transport=~\"$transport\",security=~\"$security\"})",
           "legendFormat": "FAILED",
           "refId": "A",
           "datasource": {
@@ -187,7 +247,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "100 * sum(rknmon_xray_profile_status{agent=~\"$agent\",subscription=~\"$subscription\"}) / count(rknmon_xray_profile_status{agent=~\"$agent\",subscription=~\"$subscription\"})",
+          "expr": "100 * sum(rknmon_xray_profile_status{agent=~\"$agent\",subscription=~\"$subscription\",protocol=~\"$protocol\",transport=~\"$transport\",security=~\"$security\"}) / count(rknmon_xray_profile_status{agent=~\"$agent\",subscription=~\"$subscription\",protocol=~\"$protocol\",transport=~\"$transport\",security=~\"$security\"})",
           "legendFormat": "success",
           "refId": "A",
           "datasource": {
@@ -252,7 +312,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "avg(rknmon_xray_profile_latency_ms{agent=~\"$agent\",subscription=~\"$subscription\"})",
+          "expr": "avg(rknmon_xray_profile_latency_ms{agent=~\"$agent\",subscription=~\"$subscription\",protocol=~\"$protocol\",transport=~\"$transport\",security=~\"$security\"})",
           "legendFormat": "avg",
           "refId": "A",
           "datasource": {
@@ -317,7 +377,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "count(rknmon_xray_profile_status{agent=~\"$agent\",subscription=~\"$subscription\"})",
+          "expr": "count(rknmon_xray_profile_status{agent=~\"$agent\",subscription=~\"$subscription\",protocol=~\"$protocol\",transport=~\"$transport\",security=~\"$security\"})",
           "legendFormat": "profiles",
           "refId": "A",
           "datasource": {
@@ -364,7 +424,7 @@
       "type": "stat",
       "targets": [
         {
-          "expr": "sum(rate(rknmon_xray_profile_errors_total{agent=~\"$agent\",subscription=~\"$subscription\"}[$__rate_interval]))",
+          "expr": "sum(rate(rknmon_xray_profile_errors_total{agent=~\"$agent\",subscription=~\"$subscription\",protocol=~\"$protocol\",transport=~\"$transport\",security=~\"$security\"}[$__rate_interval]))",
           "legendFormat": "errors/s",
           "refId": "A",
           "datasource": {
@@ -425,8 +485,8 @@
       "type": "state-timeline",
       "targets": [
         {
-          "expr": "rknmon_xray_profile_status{agent=~\"$agent\",subscription=~\"$subscription\"}",
-          "legendFormat": "{{profile}} / {{transport}}",
+          "expr": "rknmon_xray_profile_status{agent=~\"$agent\",subscription=~\"$subscription\",protocol=~\"$protocol\",transport=~\"$transport\",security=~\"$security\"}",
+          "legendFormat": "{{protocol}} / {{transport}} / {{security}} / {{profile}}",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -505,8 +565,8 @@
       "type": "timeseries",
       "targets": [
         {
-          "expr": "rknmon_xray_profile_latency_ms{agent=~\"$agent\",subscription=~\"$subscription\"}",
-          "legendFormat": "{{profile}} / {{transport}}",
+          "expr": "rknmon_xray_profile_latency_ms{agent=~\"$agent\",subscription=~\"$subscription\",protocol=~\"$protocol\",transport=~\"$transport\",security=~\"$security\"}",
+          "legendFormat": "{{protocol}} / {{transport}} / {{security}} / {{profile}}",
           "refId": "A",
           "datasource": {
             "type": "prometheus",
@@ -566,7 +626,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH latest AS (\n  SELECT DISTINCT ON (x.probe_node_id, COALESCE(x.subscription_name, 'default'), x.profile_id)\n    pn.name AS agent,\n    x.profile_name AS profile,\n    COALESCE(x.subscription_name, 'default') AS subscription,\n    x.protocol,\n    COALESCE(x.transport, '') AS transport,\n    x.security,\n    COALESCE(x.fingerprint, '') AS fingerprint,\n    x.server_host || ':' || x.server_port AS server,\n    x.socks_port,\n    CASE WHEN x.ok THEN 'OK' ELSE 'FAILED' END AS status,\n    round(x.latency_ms::numeric, 1) AS latency_ms,\n    x.http_status,\n    COALESCE(x.error_type, '') AS error_type,\n    left(COALESCE(x.error, ''), 180) AS error,\n    x.checked_at AS last_check\n  FROM xray_probe_results x\n  JOIN probe_nodes pn ON pn.id = x.probe_node_id\n  WHERE pn.name IN (${agent:sqlstring})\n    AND COALESCE(x.subscription_name, 'default') IN (${subscription:sqlstring})\n  ORDER BY x.probe_node_id, COALESCE(x.subscription_name, 'default'), x.profile_id, x.checked_at DESC\n)\nSELECT * FROM latest\nORDER BY status DESC, transport, profile;"
+          "rawSql": "WITH latest AS (\n  SELECT DISTINCT ON (x.probe_node_id, COALESCE(x.subscription_name, 'default'), x.profile_id)\n    pn.name AS agent,\n    x.profile_name AS profile,\n    COALESCE(x.subscription_name, 'default') AS subscription,\n    x.protocol || ' / ' || COALESCE(x.transport, 'unknown') || ' / ' || COALESCE(x.security, 'none') AS technology,\n    x.protocol,\n    COALESCE(x.transport, 'unknown') AS transport,\n    COALESCE(x.security, 'none') AS security,\n    COALESCE(x.fingerprint, '') AS fingerprint,\n    x.server_host || ':' || x.server_port AS server,\n    x.socks_port,\n    CASE\n      WHEN x.checked_at < now() - interval '15 minutes' THEN 'STALE'\n      WHEN x.ok THEN 'OK'\n      ELSE 'FAILED'\n    END AS status,\n    round(x.latency_ms::numeric, 1) AS latency_ms,\n    x.http_status,\n    COALESCE(x.error_type, '') AS error_type,\n    left(COALESCE(x.error, ''), 180) AS error,\n    x.checked_at AS last_check,\n    now() - x.checked_at AS age\n  FROM xray_probe_results x\n  JOIN probe_nodes pn ON pn.id = x.probe_node_id\n  WHERE pn.name IN (${agent:sqlstring})\n    AND COALESCE(x.subscription_name, 'default') IN (${subscription:sqlstring})\n    AND x.protocol IN (${protocol:sqlstring})\n    AND COALESCE(x.transport, 'unknown') IN (${transport:sqlstring})\n    AND COALESCE(x.security, 'none') IN (${security:sqlstring})\n  ORDER BY x.probe_node_id, COALESCE(x.subscription_name, 'default'), x.profile_id, x.checked_at DESC\n)\nSELECT * FROM latest\nORDER BY\n  CASE status WHEN 'FAILED' THEN 0 WHEN 'STALE' THEN 1 ELSE 2 END,\n  age DESC, technology, profile;"
         }
       ],
       "gridPos": {
@@ -627,7 +687,7 @@
     },
     {
       "id": 10,
-      "title": "Success by transport",
+      "title": "Success by technology",
       "type": "table",
       "targets": [
         {
@@ -638,7 +698,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "WITH latest AS (\n  SELECT DISTINCT ON (x.probe_node_id, COALESCE(x.subscription_name, 'default'), x.profile_id)\n    COALESCE(x.transport, 'unknown') AS transport,\n    x.ok\n  FROM xray_probe_results x\n  JOIN probe_nodes pn ON pn.id = x.probe_node_id\n  WHERE pn.name IN (${agent:sqlstring})\n    AND COALESCE(x.subscription_name, 'default') IN (${subscription:sqlstring})\n  ORDER BY x.probe_node_id, COALESCE(x.subscription_name, 'default'), x.profile_id, x.checked_at DESC\n)\nSELECT\n  transport,\n  count(*) AS total,\n  count(*) FILTER (WHERE ok) AS ok,\n  count(*) FILTER (WHERE NOT ok) AS failed,\n  round(100.0 * count(*) FILTER (WHERE ok) / NULLIF(count(*), 0), 1) AS success_pct\nFROM latest\nGROUP BY transport\nORDER BY transport;"
+          "rawSql": "WITH latest AS (\n  SELECT DISTINCT ON (x.probe_node_id, COALESCE(x.subscription_name, 'default'), x.profile_id)\n    x.protocol || ' / ' || COALESCE(x.transport, 'unknown') || ' / ' || COALESCE(x.security, 'none') AS technology,\n    x.ok,\n    x.checked_at\n  FROM xray_probe_results x\n  JOIN probe_nodes pn ON pn.id = x.probe_node_id\n  WHERE pn.name IN (${agent:sqlstring})\n    AND COALESCE(x.subscription_name, 'default') IN (${subscription:sqlstring})\n    AND x.protocol IN (${protocol:sqlstring})\n    AND COALESCE(x.transport, 'unknown') IN (${transport:sqlstring})\n    AND COALESCE(x.security, 'none') IN (${security:sqlstring})\n  ORDER BY x.probe_node_id, COALESCE(x.subscription_name, 'default'), x.profile_id, x.checked_at DESC\n)\nSELECT\n  technology,\n  count(*) AS total,\n  count(*) FILTER (WHERE ok AND checked_at >= now() - interval '15 minutes') AS ok,\n  count(*) FILTER (WHERE NOT ok AND checked_at >= now() - interval '15 minutes') AS failed,\n  count(*) FILTER (WHERE checked_at < now() - interval '15 minutes') AS stale,\n  round(100.0 * count(*) FILTER (WHERE ok AND checked_at >= now() - interval '15 minutes') / NULLIF(count(*) FILTER (WHERE checked_at >= now() - interval '15 minutes'), 0), 1) AS success_pct\nFROM latest\nGROUP BY technology\nORDER BY failed DESC, stale DESC, technology;"
         }
       ],
       "gridPos": {
@@ -685,7 +745,7 @@
     },
     {
       "id": 11,
-      "title": "Status history",
+      "title": "Status history by technology/profile",
       "type": "timeseries",
       "targets": [
         {
@@ -696,7 +756,7 @@
           },
           "format": "time_series",
           "rawQuery": true,
-          "rawSql": "SELECT\n  x.checked_at AS \"time\",\n  COALESCE(x.subscription_name, 'default') || ' / ' || x.profile_name || ' / ' || COALESCE(x.transport, '') AS metric,\n  CASE WHEN x.ok THEN 1 ELSE 0 END AS value\nFROM xray_probe_results x\nJOIN probe_nodes pn ON pn.id = x.probe_node_id\nWHERE pn.name IN (${agent:sqlstring})\n  AND COALESCE(x.subscription_name, 'default') IN (${subscription:sqlstring})\n  AND $__timeFilter(x.checked_at)\nORDER BY x.checked_at;"
+          "rawSql": "SELECT\n  x.checked_at AS \"time\",\n  x.protocol || ' / ' || COALESCE(x.transport, 'unknown') || ' / ' || COALESCE(x.security, 'none') || ' / ' || x.profile_name AS metric,\n  CASE WHEN x.ok THEN 1 ELSE 0 END AS value\nFROM xray_probe_results x\nJOIN probe_nodes pn ON pn.id = x.probe_node_id\nWHERE pn.name IN (${agent:sqlstring})\n  AND COALESCE(x.subscription_name, 'default') IN (${subscription:sqlstring})\n  AND x.protocol IN (${protocol:sqlstring})\n  AND COALESCE(x.transport, 'unknown') IN (${transport:sqlstring})\n  AND COALESCE(x.security, 'none') IN (${security:sqlstring})\n  AND $__timeFilter(x.checked_at)\nORDER BY x.checked_at;"
         }
       ],
       "gridPos": {
@@ -763,7 +823,7 @@
           },
           "format": "table",
           "rawQuery": true,
-          "rawSql": "SELECT\n  x.checked_at AS time,\n  pn.name AS agent,\n  x.profile_name AS profile,\n  COALESCE(x.subscription_name, 'default') AS subscription,\n  COALESCE(x.transport, '') AS transport,\n  x.server_host || ':' || x.server_port AS server,\n  COALESCE(x.error_type, '') AS error_type,\n  left(COALESCE(x.error, ''), 220) AS error\nFROM xray_probe_results x\nJOIN probe_nodes pn ON pn.id = x.probe_node_id\nWHERE NOT x.ok\n  AND pn.name IN (${agent:sqlstring})\n  AND COALESCE(x.subscription_name, 'default') IN (${subscription:sqlstring})\n  AND $__timeFilter(x.checked_at)\nORDER BY x.checked_at DESC\nLIMIT 100;"
+          "rawSql": "SELECT\n  x.checked_at AS time,\n  pn.name AS agent,\n  x.profile_name AS profile,\n  COALESCE(x.subscription_name, 'default') AS subscription,\n  x.protocol || ' / ' || COALESCE(x.transport, 'unknown') || ' / ' || COALESCE(x.security, 'none') AS technology,\n  COALESCE(x.transport, 'unknown') AS transport,\n  x.server_host || ':' || x.server_port AS server,\n  COALESCE(x.error_type, '') AS error_type,\n  left(COALESCE(x.error, ''), 220) AS error\nFROM xray_probe_results x\nJOIN probe_nodes pn ON pn.id = x.probe_node_id\nWHERE NOT x.ok\n  AND pn.name IN (${agent:sqlstring})\n  AND COALESCE(x.subscription_name, 'default') IN (${subscription:sqlstring})\n  AND x.protocol IN (${protocol:sqlstring})\n  AND COALESCE(x.transport, 'unknown') IN (${transport:sqlstring})\n  AND COALESCE(x.security, 'none') IN (${security:sqlstring})\n  AND $__timeFilter(x.checked_at)\nORDER BY x.checked_at DESC\nLIMIT 100;"
         }
       ],
       "gridPos": {

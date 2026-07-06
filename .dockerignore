@@ -12,4 +12,11 @@ htmlcov
 monitoring/nginx/ssl/*.pem
 monitoring/nginx/ssl/*.key
 monitoring/nginx/ssl/*.crt
+monitoring/nginx/nginx.conf.bak.20260623-192754
+monitoring/nginx/*.bak*
+*.bak
+*.bak.*
+*.log
+.git
+.github
 .alembic/versions/*.pyc

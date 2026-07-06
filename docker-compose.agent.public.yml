@@ -8,7 +8,7 @@
 #   docker push ghcr.io/yourname/rknmon-agent:stable
 #
 # Override with env:
-#   RKNMON_AGENT_IMAGE=ghcr.io/yourname/rknmon-agent:stable
+#   RKNMON_AGENT_IMAGE=ghcr.io/<owner>/rknmon-agent:stable
 #
 # The installer script writes /opt/rknmon-agent/.env.agent and .env.xray
 # BEFORE invoking `docker compose up -d`, so secrets never live in the
@@ -34,7 +34,7 @@ services:
       - 8.8.8.8
 
   rknmon-agent:
-    image: ${RKNMON_AGENT_IMAGE:-ghcr.io/yourname/rknmon-agent:stable}
+    image: ${RKNMON_AGENT_IMAGE:-ghcr.io/rknmon/rknmon-agent:stable}
     container_name: ${AGENT_NAME:-rknmon-agent}
     restart: unless-stopped
     env_file:

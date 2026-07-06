@@ -11,9 +11,20 @@ from rknmon.agent.dpi import (
     probe_dns_interference,
     probe_l4_25,
 )
-from rknmon.agent.xray import XrayProfile, build_xray_config, load_profiles_from_urls
+from rknmon.agent.xray import (
+    XrayProfile,
+    build_xray_config,
+    load_profiles_with_status,
+)
 from rknmon.probes.dns_probe import probe_dns as default_probe_dns
 from rknmon.probes.http_probe import probe_http as default_probe_http
+
+
+# Sentinel for the default ``fetch_profiles`` argument. We use a dedicated
+# object (not ``load_profiles_from_urls`` directly) so we can detect when
+# the caller overrode the legacy fetcher — and skip the real network call
+# in the default status-aware path. See ``run_xray_probe_cycle``.
+_DEFAULT_FETCH_PROFILES = object()
 
 
 async def run_probe_cycle(
@@ -165,19 +176,37 @@ async def run_xray_probe_cycle(
     test_url: str,
     subscription_names: list[str] | None = None,
     socks_start_port: int = 11001,
-    fetch_profiles: Callable[..., Awaitable[list[XrayProfile]]] = load_profiles_from_urls,
+    # ``_DEFAULT_FETCH_PROFILES`` is a sentinel object (not a callable) used
+    # purely to detect "no override". The type annotation stays Callable for
+    # the public API, but we cast on the default to keep mypy/pyright quiet.
+    fetch_profiles: Callable[..., Awaitable[list[XrayProfile]]] = (
+        _DEFAULT_FETCH_PROFILES  # type: ignore[assignment]
+    ),
     probe_profile: Callable[[dict, str], Awaitable[dict]] = default_probe_xray_profile,
     config_path: str | Path | None = None,
     wait_for_socks: bool = False,
     xray_host: str = "127.0.0.1",
     ready_timeout_seconds: float = 60,
 ) -> dict:
+    # The status-aware fetcher is the default; the legacy single-arg fetcher
+    # is preserved for callers (and tests) that override it explicitly. We
+    # detect "explicit legacy override" by sentinel so a caller that passes
+    # only ``fetch_profiles`` doesn't accidentally trigger a real network
+    # call via the default status-aware path.
     await client.register()
     await client.heartbeat()
-    try:
-        profiles = await fetch_profiles(subscription_urls, subscription_names=subscription_names)
-    except TypeError:
-        profiles = await fetch_profiles(subscription_urls)
+    subscription_statuses: list[dict] = []
+    if fetch_profiles is _DEFAULT_FETCH_PROFILES:
+        profiles, subscription_statuses = await load_profiles_with_status(
+            subscription_urls, subscription_names=subscription_names
+        )
+    else:
+        try:
+            profiles = await fetch_profiles(
+                subscription_urls, subscription_names=subscription_names
+            )
+        except TypeError:
+            profiles = await fetch_profiles(subscription_urls)
     if config_path is not None:
         assignments = write_xray_config(profiles, config_path, socks_start_port=socks_start_port)
     else:
@@ -209,7 +238,17 @@ async def run_xray_probe_cycle(
                 **probe_result,
             }
         )
-    return await client.submit_xray_results(results)
+    xray_response = await client.submit_xray_results(results)
+
+    # Best-effort: report subscription health so dead providers surface in
+    # the central DB. Failure here MUST NOT fail the xray cycle.
+    if subscription_statuses:
+        try:
+            await client.submit_subscription_health(subscription_statuses)
+        except Exception as exc:  # noqa: BLE001
+            import logging
+            logging.warning("submit_subscription_health failed: %s", exc)
+    return xray_response
 
 
 async def run_dpi_probe_cycle(
