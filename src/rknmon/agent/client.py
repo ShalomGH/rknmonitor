@@ -9,6 +9,7 @@ class AgentClient:
         agent_name: str,
         agent_location: str | None = None,
         agent_provider: str | None = None,
+        agent_role: str = "subject",
         agent_version: str = "0.1.0",
         public_ip: str | None = None,
     ):
@@ -17,6 +18,7 @@ class AgentClient:
         self.agent_name = agent_name
         self.agent_location = agent_location
         self.agent_provider = agent_provider
+        self.agent_role = agent_role
         self.agent_version = agent_version
         self.public_ip = public_ip
 
@@ -29,6 +31,7 @@ class AgentClient:
             "name": self.agent_name,
             "location": self.agent_location,
             "provider": self.agent_provider,
+            "role": self.agent_role,
             "agent_version": self.agent_version,
             "public_ip": self.public_ip,
         }
@@ -38,10 +41,7 @@ class AgentClient:
                 return await resp.json()
 
     async def heartbeat(self) -> dict:
-        payload = {
-            "agent_version": self.agent_version,
-            "public_ip": self.public_ip,
-        }
+        payload = {"agent_version": self.agent_version, "public_ip": self.public_ip}
         async with aiohttp.ClientSession(headers=self._headers) as session:
             async with session.post(f"{self.base_url}/agent/heartbeat", json=payload) as resp:
                 resp.raise_for_status()
@@ -72,15 +72,6 @@ class AgentClient:
                 return await resp.json()
 
     async def submit_subscription_health(self, items: list[dict]) -> dict:
-        """Report per-subscription fetch outcome to the central server.
-
-        ``items`` is a list of dicts produced by
-        :func:`rknmon.agent.xray.load_profiles_with_status`.
-
-        Returns the parsed JSON body. Raises on HTTP errors so the caller
-        can decide whether to log/retry — but xray cycle should never abort
-        on this.
-        """
         async with aiohttp.ClientSession(headers=self._headers) as session:
             async with session.post(
                 f"{self.base_url}/agent/subscription-health", json={"items": items}
