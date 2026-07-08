@@ -7,6 +7,7 @@ class AgentSettings(BaseSettings):
     agent_name: str = "rknmon-agent"
     agent_location: str | None = None
     agent_provider: str | None = None
+    agent_role: str = "subject"
     agent_version: str = "0.1.0"
     public_ip: str | None = None
     probe_interval_seconds: int = 300
@@ -28,6 +29,19 @@ class AgentSettings(BaseSettings):
     dpi_regular_urls: str = "https://github.com/,https://www.google.com/,https://ru.wikipedia.org/"
     dpi_timeout_seconds: float = 10.0
     dpi_l4_payload_bytes: int = 65536
+
+    # Controlled experiments are opt-in. Use endpoints you own or are
+    # explicitly authorized to test.
+    dpi_experiments_enabled: bool = False
+    dpi_experiment_targets: str = ""
+    dpi_sni_variants: str = "correct,none,bogus.invalid"
+    dpi_host_variants: str = ""
+    dpi_udp_targets: str = ""
+    dpi_http3_targets: str = ""
+    dpi_artifact_dir: str = "/var/lib/rknmon/artifacts"
+    dpi_capture_on_anomaly: bool = False
+    dpi_trace_on_anomaly: bool = False
+
     log_level: str = "INFO"
 
     model_config = {"env_file": ".env.agent", "extra": "ignore"}
@@ -51,3 +65,23 @@ class AgentSettings(BaseSettings):
     @property
     def dpi_regular_url_list(self) -> list[str]:
         return [u.strip() for u in self.dpi_regular_urls.split(",") if u.strip()]
+
+    @property
+    def dpi_experiment_target_list(self) -> list[str]:
+        return [t.strip() for t in self.dpi_experiment_targets.split(",") if t.strip()]
+
+    @property
+    def dpi_sni_variant_list(self) -> list[str]:
+        return [v.strip() for v in self.dpi_sni_variants.split(",") if v.strip()]
+
+    @property
+    def dpi_host_variant_list(self) -> list[str]:
+        return [v.strip() for v in self.dpi_host_variants.split(",") if v.strip()]
+
+    @property
+    def dpi_udp_target_list(self) -> list[str]:
+        return [v.strip() for v in self.dpi_udp_targets.split(",") if v.strip()]
+
+    @property
+    def dpi_http3_target_list(self) -> list[str]:
+        return [v.strip() for v in self.dpi_http3_targets.split(",") if v.strip()]
