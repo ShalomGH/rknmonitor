@@ -11,7 +11,7 @@ client = TestClient(app)
 @patch("rknmon.api.agents.execute", new_callable=AsyncMock)
 @patch("rknmon.api.agents.fetchrow")
 def test_agent_xray_results_ingest_with_node_api_key(mock_fetchrow, mock_execute, mock_record):
-    mock_fetchrow.return_value = {"id": 7, "name": "rpi-home", "is_active": True}
+    mock_fetchrow.return_value = {"id": 7, "name": "edge-home", "is_active": True}
     payload = {
         "results": [
             {

@@ -48,7 +48,7 @@ src/rknmon/
 │   ├── alerts.py     # Webhook alerting
 │   ├── agents.py     # Agent API: /agent/register, /agent/heartbeat, /agent/targets, /agent/results, /agent/xray-results (X-Node-API-Key)
 │   └── auth.py       # API key middleware
-├── agent/            # Код RPi-агента, запускается и на central в тестах
+├── agent/            # Код edge-агента, запускается и на central в тестах
 │   ├── client.py     # AgentClient: register/heartbeat/fetch_targets/submit_results/submit_xray_results
 │   ├── config.py     # Pydantic-settings: central_api_url, node_api_key, xray_subscription_urls, xray_subscription_names, ...
 │   ├── xray.py       # XrayProfile, parse_subscription_text, build_xray_config, load_profiles_from_urls
@@ -183,8 +183,8 @@ pytest tests/                 # 59 тестов (актуально на 2026-06
 - ✅ Graceful shutdown + cleanup реализованы
 - ✅ Evaluator N+1 fixed (batch queries)
 - ✅ Advisory lock для schema init (race condition при старте)
-- ✅ **Xray monitoring** — agent+RPi sidecar запущен, `/agent/xray-results` принимает результаты, Grafana `rknmon-xray` (uid) с фильтрами `Agent`/`Subscription` готов
-- ✅ **Multi-subscription support** — `XRAY_SUBSCRIPTION_URLS` + `XRAY_SUBSCRIPTION_NAMES` (comma-separated, в одном порядке), примерные safe labels: `rpi-main`, `rpi-secondary`; реальные URL/статусы живут только в локальной `.env.xray`.
+- ✅ **Xray monitoring** — agent+Xray sidecar запущен, `/agent/xray-results` принимает результаты, Grafana `rknmon-xray` (uid) с фильтрами `Agent`/`Subscription` готов
+- ✅ **Multi-subscription support** — `XRAY_SUBSCRIPTION_URLS` + `XRAY_SUBSCRIPTION_NAMES` (comma-separated, в одном порядке), примерные safe labels: `edge-main`, `edge-secondary`; реальные URL/статусы живут только в локальной `.env.xray`.
 - ✅ **Grafana provisioning editable + allowUiUpdates** — дашборды можно править из UI
 - ⚠️ **Списка реальных доменов нет** — в базе только `example.com` (тестовый)
 - ⚠️ **External vantage point не реализован** — нет подтверждения блокировки из-за рубежа
@@ -195,7 +195,7 @@ pytest tests/                 # 59 тестов (актуально на 2026-06
 2. **Настроить webhook alerts** — URL и формат см. `src/rknmon/alerts/webhook.py`.
 3. **Добавить external vantage** (опционально) — REST endpoint на сервере за пределами РФ для double-check.
 4. **Алёрты на Xray failures** — `rknmon_xray_profile_status{...}==0` или spike в `rknmon_xray_profile_errors_total` (пока только дашборд).
-5. **Multi-vantage agents** — добавить RPi-агенты на других провайдерах / локациях для cross-ISP корреляции.
+5. **Multi-vantage agents** — добавить edge-агенты на других провайдерах / локациях для cross-ISP корреляции.
 6. **TLS / reverse proxy** — в prod nginx уже работает на `:8443` → app `:23234`. Let's Encrypt не подключали — используется существующий сертификат.
 
 ---
@@ -207,7 +207,7 @@ pytest tests/                 # 59 тестов (актуально на 2026-06
 - `PROJECT_CONTEXT.md` — полный LLM-контекст (архитектура, история, инварианты, runbook, соглашения)
 - `QUICKREF.md` — TL;DR карточка для новых LLM-сессий
 - `RUNBOOK.md` — бэкапы, нагрузочные тесты, troubleshooting
-- `deploy/README-agent.md` — deploy guide для RPi-агента
+- `deploy/README-agent.md` — deploy guide для edge-агента
 - `IMPLEMENTATION_PLAN.md` — история реализации (M1-M6)
 - `docs/superpowers/plans/2026-06-09-xray-monitoring.md` — план реализации Xray-фичи
 - `.env` — не в git, генерируется руками

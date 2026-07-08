@@ -107,7 +107,7 @@ async def test_load_profiles_with_status_returns_merged_profiles_and_per_url_sta
 @pytest.mark.asyncio
 async def test_run_xray_probe_cycle_default_submits_subscription_health():
     """With default args, the cycle must report subscription health to
-    the central server (this is the production code path on the RPi)."""
+    the central server (this is the production code path on an edge agent)."""
     client = AsyncMock()
     # Pre-built profiles + statuses (we override the default fetcher via
     # the sentinel-aware path by passing an explicit legacy fetcher that
@@ -147,8 +147,8 @@ async def test_run_xray_probe_cycle_default_submits_subscription_health():
             "profiles_count": len(profiles),
         },
         {
-            "name": "rpi-main",
-            "subscription_name": "rpi-main",
+            "name": "edge-main",
+            "subscription_name": "edge-main",
             "url": "https://dead.example/sub",
             "subscription_url": "https://dead.example/sub",
             "ok": False,
@@ -253,12 +253,12 @@ api_client = TestClient(app)
 def test_subscription_health_endpoint_writes_rows_and_records_metrics(
     mock_fetchrow, mock_execute, mock_record
 ):
-    mock_fetchrow.return_value = {"id": 7, "name": "rpi-home", "is_active": True}
+    mock_fetchrow.return_value = {"id": 7, "name": "edge-home", "is_active": True}
 
     payload = {
         "items": [
             {
-                "subscription_name": "rpi-main",
+                "subscription_name": "edge-main",
                 "subscription_url": "https://sub.primary.example/sub/example-token",
                 "ok": False,
                 "http_status": None,
@@ -267,7 +267,7 @@ def test_subscription_health_endpoint_writes_rows_and_records_metrics(
                 "profiles_count": 0,
             },
             {
-                "subscription_name": "rpi-secondary",
+                "subscription_name": "edge-secondary",
                 "subscription_url": "https://sub.secondary.example/sub/example",
                 "ok": True,
                 "http_status": 200,
@@ -290,7 +290,7 @@ def test_subscription_health_endpoint_writes_rows_and_records_metrics(
     sql = mock_execute.await_args_list[0].args[0]
     assert "INSERT INTO xray_subscription_health" in sql
     assert mock_execute.await_args_list[0].args[1] == 7
-    assert mock_execute.await_args_list[0].args[2] == "rpi-main"
+    assert mock_execute.await_args_list[0].args[2] == "edge-main"
     assert mock_execute.await_args_list[0].args[3] == "https://sub.primary.example/sub/example-token"
     assert mock_execute.await_args_list[0].args[4] is False  # ok
 
@@ -299,11 +299,11 @@ def test_subscription_health_endpoint_writes_rows_and_records_metrics(
     dead_call = mock_record.call_args_list[0].kwargs
     assert dead_call["ok"] is False
     assert dead_call["error_type"] == "timeout"
-    assert dead_call["subscription"] == "rpi-main"
+    assert dead_call["subscription"] == "edge-main"
 
     alive_call = mock_record.call_args_list[1].kwargs
     assert alive_call["ok"] is True
-    assert alive_call["subscription"] == "rpi-secondary"
+    assert alive_call["subscription"] == "edge-secondary"
 
 
 @patch("rknmon.api.agents.fetchrow")

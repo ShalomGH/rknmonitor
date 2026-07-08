@@ -4,11 +4,11 @@
 
 ## Суть
 
-`rkn-blocks-monitoring` — FastAPI central + RPi-агенты для мониторинга РКН-блокировок и Xray-профилей.
+`rkn-blocks-monitoring` — FastAPI central + edge-агенты для мониторинга РКН-блокировок и Xray-профилей.
 
 - Repo: локальная рабочая копия проекта
 - Central: сервер `monitor.example.com`, `nginx 8443 → app 23234`, Postgres + Prometheus + Grafana в Docker
-- RPi/edge agent: ARMv7/ARM64, outbound-only HTTPS к central API
+- Edge agent: Linux host/container (amd64/arm64/armv7), outbound-only HTTPS к central API
 - Стек: Python 3.12, FastAPI, asyncpg, aiohttp, Docker
 
 ## Полный контекст
@@ -28,7 +28,7 @@
 ## Связанные skills
 
 - `devops/censorship-monitoring` — общий DPI/RKN/Xray playbook
-- `devops/rpi-home-access` — SSH к малине, ARMv7 image workaround
+- `devops/rpi-home-access` — частный runbook для домашнего Raspberry Pi/ARMv7
 - `devops/monitoring-stack-docker` — Prometheus + Grafana deploy
 - `devops/secure-server-run` — iptables, security hardening
 - `superpowers:subagent-driven-development` — multi-agent реализация фич

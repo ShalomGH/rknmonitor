@@ -19,7 +19,7 @@ cp .env.example .env
 docker compose -f docker-compose.prod.yml up -d
 ```
 
-## Docker agent (Raspberry / другие ноды)
+## Docker agent (любая Linux-нода)
 
 Агент работает без VPN и без входящих портов: только outbound HTTPS в центральный API.
 
@@ -32,7 +32,7 @@ rknmon-admin agent-invite --name friend-msk --location msk --provider mts
 # → печатает готовую команду, которую можно скопировать в чат
 ```
 
-Друг запускает на своей машине (RPi, VPS, домашний сервер) одну команду:
+Друг запускает на своей машине (VPS, домашний сервер, Raspberry Pi, mini-PC) одну команду:
 
 ```bash
 curl -fsSL https://mon.example.com/install-agent.sh | sudo bash -s -- \
@@ -85,9 +85,9 @@ curl -X DELETE https://mon.example.com/admin/agents/invites/7 \
     -H "X-API-Key: $API_KEY"
 ```
 
-### Raspberry Pi quick deploy (legacy, ручная установка)
+### Manual agent deploy (legacy)
 
-Старый путь через `git clone` всё ещё работает, если у тебя есть прямой SSH-доступ к другу и ты готов настраивать `.env.agent` руками.
+Старый путь через `git clone` всё ещё работает на любой Linux-ноде, если у тебя есть прямой SSH-доступ и ты готов настраивать `.env.agent` руками.
 
 ```bash
 sudo apt update

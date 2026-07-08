@@ -1,6 +1,6 @@
-# Raspberry Pi agent (Docker)
+# Edge agent (Docker)
 
-1. Install Docker on the Pi:
+1. Install Docker on the agent host (VPS, home server, Raspberry Pi, etc.):
    - `sudo apt update`
    - `sudo apt install -y docker.io docker-compose-plugin git`
    - `sudo usermod -aG docker $USER`

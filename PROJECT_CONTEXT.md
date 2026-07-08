@@ -11,7 +11,7 @@
 Два режима работы:
 
 1. **Central server** (на `monitor.example.com`, порт `23234` за nginx `8443`) — FastAPI, PostgreSQL, Prometheus, Grafana. Принимает результаты, хранит, отдаёт `/metrics`, даёт дашборд.
-2. **Agent** (на Raspberry Pi дома, ARMv7, доступ через `ssh rpi` → reverse SSH tunnel к Hermes) — периодически проверяет HTTP/DNS-цели, плюс Xray-профили, отправляет результаты в central.
+2. **Agent** (любой Linux host/container: VPS, домашний сервер, Raspberry Pi, mini-PC; amd64/arm64/armv7) — периодически проверяет HTTP/DNS-цели, плюс Xray-профили, отправляет результаты в central. Raspberry Pi — только один частный deployment target.
 
 Назначение: узнавать, что блокирует РКН, как работает DPI, и какие Xray-профили реально живые.
 
@@ -44,9 +44,9 @@
 ├── prometheus/prometheus.yml
 ├── monitoring/nginx/nginx.conf                   # SSL proxy 8443 → 23234
 ├── docker-compose.prod.yml                       # central stack
-├── docker-compose.agent.yml                      # RPi agent stack (rknmon-agent + rknmon-xray sidecar)
+├── docker-compose.agent.yml                      # edge agent stack (rknmon-agent + rknmon-xray sidecar)
 ├── Dockerfile / Dockerfile.agent
-├── deploy/README-agent.md                        # deploy guide для RPi
+├── deploy/README-agent.md                        # deploy guide для edge agent
 ├── docs/superpowers/plans/2026-06-09-xray-monitoring.md
 ├── tests/                                        # 59 тестов, pytest
 ├── AGENTS.md                                     # точка входа для LLM-агентов
@@ -58,7 +58,7 @@
 └── README.md                                     # human quick start
 ```
 
-На малине (`ssh rpi`):
+На конкретном agent host (пример legacy-копии):
 
 ```text
 /home/ubuntu/rkn-blocks-monitoring-agent/   # копия репо
@@ -81,7 +81,7 @@
                             │ HTTPS out, X-Node-API-Key
                             │
 ┌───────────────────────────┴───────────────────────────┐
-│ RPi Home (ARMv7)                                      │
+│ Edge Agent (VPS / home server / Raspberry Pi)                                      │
 │  rknmon-agent (network_mode: service:rknmon-xray)      │
 │     ├─ registers/heartbeats at central                │
 │     ├─ fetches /agent/targets                         │
@@ -165,7 +165,7 @@ GRAFANA_ADMIN_PASSWORD=<secret>
 ```bash
 CENTRAL_API_URL=https://monitor.example.com:8443
 NODE_API_KEY=<per-node>
-AGENT_NAME=rknmon-agent-rpi-home
+AGENT_NAME=rknmon-agent-edge-home
 AGENT_LOCATION=home
 AGENT_PROVIDER=domru
 AGENT_VERSION=0.1.0
@@ -180,7 +180,7 @@ LOG_LEVEL=INFO
 ```bash
 XRAY_ENABLED=true
 XRAY_SUBSCRIPTION_URLS=https://sub1.example/xxx,https://sub2.example/yyy
-XRAY_SUBSCRIPTION_NAMES=rpi-main,rpi-secondary     # safe labels для Grafana
+XRAY_SUBSCRIPTION_NAMES=edge-main,edge-secondary     # safe labels для Grafana
 XRAY_TEST_URL=https://cp.cloudflare.com/
 XRAY_SOCKS_START_PORT=11001
 XRAY_CONFIG_PATH=/config/xray.generated.json
@@ -203,10 +203,10 @@ XRAY_READY_TIMEOUT_SECONDS=90
   - `rknmon-xray` — Xray профили (uid `rknmon-xray`), 12 панелей, фильтры `Agent` + `Subscription`.
 - Provisioning включён с `editable: true, allowUiUpdates: true` — дашборды можно править из UI.
 
-### Что работает на малине
+### Что работает на edge agent host
 
 - Контейнеры `rknmon-agent` + `rknmon-xray` (`teddysun/xray:latest`, ARMv7).
-- Сейчас 2 примерные подписки: `rpi-main`, `rpi-secondary`. Количество профилей и статусы зависят от локальной `.env.xray`.
+- Сейчас 2 примерные подписки: `edge-main`, `edge-secondary`. Количество профилей и статусы зависят от локальной `.env.xray`.
 - SOCKS-порты: `11001..11012` на `127.0.0.1`.
 - Проба идёт через `curl --proxy socks5h://127.0.0.1:<port> https://cp.cloudflare.com/`.
 
@@ -232,8 +232,8 @@ XRAY_READY_TIMEOUT_SECONDS=90
 | M3 | vendored Chart.js (air-gapped), graceful shutdown, retention cleanup, evaluator N+1 fix, advisory lock |
 | v1.0.0 | M4-M6: dashboard, auth, rate limits, export, runbook |
 | позже | Grafana + Prometheus добавлены в stack; PROJECT_MANIFEST.md для LLM |
-| 2026-06-09 | **Xray monitoring** — план в `docs/superpowers/plans/2026-06-09-xray-monitoring.md`, реализация полностью завершена и задеплоена на RPi |
-| 2026-06-09 | RPi agent + Xray sidecar запущены, endpoint `/agent/xray-results` принимает данные |
+| 2026-06-09 | **Xray monitoring** — план в `docs/superpowers/plans/2026-06-09-xray-monitoring.md`, реализация полностью завершена и задеплоена на edge agent host |
+| 2026-06-09 | Edge agent + Xray sidecar запущены, endpoint `/agent/xray-results` принимает данные |
 | 2026-06-09 | Grafana dashboard `rknmon-xray` (12 панелей) с фильтрами `Agent` + `Subscription` |
 | 2026-06-09 | DB migration: `xray_probe_results.subscription_name` column + index |
 | 2026-06-09 | Provisioning dashboards editable + allowUiUpdates = true |
@@ -259,10 +259,10 @@ sudo docker compose -f docker-compose.prod.yml logs -f grafana
 sudo docker build -t rknmon:1.0.0 .
 ```
 
-### Agent (RPi) — управление
+### Agent host — управление
 
 ```bash
-ssh rpi
+ssh user@agent-host
 cd ~/rkn-blocks-monitoring-agent
 docker compose -f docker-compose.agent.yml ps
 docker compose -f docker-compose.agent.yml logs -f rknmon-agent
@@ -270,28 +270,28 @@ docker compose -f docker-compose.agent.yml logs -f rknmon-xray
 docker compose -f docker-compose.agent.yml restart rknmon-agent
 ```
 
-Обновить код на малине:
+Обновить код на вручную управляемом agent host:
 
 ```bash
 rsync -az --delete --exclude .git --exclude .venv --exclude .pytest_cache \
   --exclude __pycache__ --exclude htmlcov --exclude .coverage \
   --exclude .env --exclude .env.agent --exclude .env.xray \
-  ./ rpi:~/rkn-blocks-monitoring-agent/
+  ./ user@agent-host:~/rkn-blocks-monitoring-agent/
 
-ssh rpi "cd ~/rkn-blocks-monitoring-agent && \
+ssh user@agent-host "cd ~/rkn-blocks-monitoring-agent && \
   docker compose -f docker-compose.agent.yml build rknmon-agent && \
   docker compose -f docker-compose.agent.yml up -d --force-recreate rknmon-agent"
 ```
 
 ### ARMv7 image pitfall
 
-Docker Hub на малине часто зависает. Workaround:
+Docker image pulls на слабых/цензурируемых agent hosts могут зависать. Workaround:
 
 ```bash
 sudo docker pull --platform linux/arm/v7 IMAGE:TAG
 sudo docker save IMAGE:TAG | gzip -1 > /tmp/img.tar.gz
-scp /tmp/img.tar.gz rpi:/tmp/img.tar.gz
-ssh rpi 'docker load -i /tmp/img.tar.gz'
+scp /tmp/img.tar.gz user@agent-host:/tmp/img.tar.gz
+ssh user@agent-host 'docker load -i /tmp/img.tar.gz'
 ```
 
 ### Запуск тестов
@@ -307,7 +307,7 @@ pytest tests/test_xray_agent_runner.py -v
 - central: `curl http://127.0.0.1:23234/health` и `curl http://127.0.0.1:23234/metrics/ | head`
 - БД: `sudo docker exec rknmon_db psql -U rknmon -d rknmon -P pager=off -c "..."`
 - Grafana: проверить datasource `PBFA97CFB590B2093` (uid Prometheus), Postgres `grafana-postgres`
-- SOCKS на малине: `ssh rpi 'docker exec rknmon-agent sh -lc "for p in 11001 11002; do curl -sS -o /dev/null -w %{http_code} --max-time 15 --proxy socks5h://127.0.0.1:\${p} https://cp.cloudflare.com/; done"'`
+- SOCKS на agent host: `ssh user@agent-host 'docker exec rknmon-agent sh -lc "for p in 11001 11002; do curl -sS -o /dev/null -w %{http_code} --max-time 15 --proxy socks5h://127.0.0.1:\${p} https://cp.cloudflare.com/; done"'`
 
 ### Grafana: datasource UID
 
@@ -324,7 +324,7 @@ pytest tests/test_xray_agent_runner.py -v
 
 ## 9. Что осталось / TODO
 
-- Реальные subscription-ссылки на малине пока статичные; в будущем можно добавить ротацию через env-шаблон или vault.
+- Реальные subscription-ссылки на agent host пока статичные; в будущем можно добавить ротацию через env-шаблон или vault.
 - External vantage point для cross-check блокировок (отдельная VPS за границей) — пока не реализован.
 - Multi-vantage agents на других провайдерах (в планах).
 - Алёрты на Xray profile failures (transport degraded, error spike) — пока только дашборд.
@@ -337,13 +337,13 @@ pytest tests/test_xray_agent_runner.py -v
 Полный «Не делай» и security pitfalls — в `QUICKREF.md` и `AGENTS.md`. Здесь — только самое важное:
 
 - **TDD:** красный тест → реализация → зелёный тест → рефактор. `pytest -q` зелёный перед коммитом/деплоем.
-- **Деплой:** сначала central (`docker build` + `up -d`), потом RPi (`rsync` + `compose up -d`).
+- **Деплой:** сначала central (`docker build` + `up -d`), потом agent host (`rsync` + `compose up -d`) или public installer.
 - **Секреты:** API keys, tokens, subscription links, passwords — никогда в чат, README, коммиты, память; заменять на `<redacted>`.
 - **Метрики проверять ДО "готово":** `curl /metrics` или `psql` для БД.
 - **Python 3.12**, `from __future__ import annotations`, Pydantic v2 + pydantic-settings, raw asyncpg (не ORM).
 - **Тесты:** pytest, pytest-asyncio, mock через `unittest.mock.AsyncMock`/`patch`.
 - **ASCII-only** в коде/Python комментариях и YAML — cyrillic ломает парсинг.
-- **Central:** prod через `docker-compose.prod.yml` + nginx. **Agent:** Docker на RPi, не systemd.
+- **Central:** prod через `docker-compose.prod.yml` + nginx. **Agent:** Docker на любом Linux host/container; Raspberry Pi — частный случай, не архитектурное требование.
 - **Bind `0.0.0.0`** только на nginx `:8443`; всё остальное internal/127.0.0.1.
 - **iptables whitelist** для всех публичных портов (см. skill `secure-server-run`).
 
@@ -352,7 +352,7 @@ pytest tests/test_xray_agent_runner.py -v
 ## 11. Связанные skills
 
 - `devops/censorship-monitoring` — Xray sidecar pattern, общая архитектура
-- `devops/rpi-home-access` — SSH к малине, ARMv7 image workaround
+- `devops/rpi-home-access` — частный runbook для домашнего Raspberry Pi/ARMv7
 - `devops/secure-server-run` — iptables, security hardening
 - `devops/monitoring-stack-docker` — Prometheus + Grafana deploy
 - `devops/hermes-dashboard-themes` — Grafana theming

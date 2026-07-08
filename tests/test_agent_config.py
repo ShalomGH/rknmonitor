@@ -8,7 +8,7 @@ def test_agent_settings_from_env_file(tmp_path: Path):
     env.write_text(
         "CENTRAL_API_URL=https://mon.example.com\n"
         "NODE_API_KEY=node-secret\n"
-        "AGENT_NAME=rpi-home\n"
+        "AGENT_NAME=edge-home\n"
         "PROBE_INTERVAL_SECONDS=120\n"
         "PROBE_CONCURRENCY=7\n"
         "XRAY_ENABLED=true\n"
@@ -25,7 +25,7 @@ def test_agent_settings_from_env_file(tmp_path: Path):
 
     assert settings.central_api_url == "https://mon.example.com"
     assert settings.node_api_key == "node-secret"
-    assert settings.agent_name == "rpi-home"
+    assert settings.agent_name == "edge-home"
     assert settings.probe_interval_seconds == 120
     assert settings.probe_concurrency == 7
     assert settings.xray_enabled is True

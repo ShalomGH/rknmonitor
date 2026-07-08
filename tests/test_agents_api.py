@@ -11,7 +11,7 @@ client = TestClient(app)
 @patch("rknmon.api.agents.fetch")
 @patch("rknmon.api.agents.fetchrow")
 def test_agent_targets_returns_active_targets_for_valid_node_key(mock_fetchrow, mock_fetch):
-    mock_fetchrow.return_value = {"id": 7, "name": "rpi-home", "is_active": True}
+    mock_fetchrow.return_value = {"id": 7, "name": "edge-home", "is_active": True}
     mock_fetch.return_value = [
         {"id": 1, "url": "https://youtube.com", "domain": "youtube.com", "category": "blocked_rkn", "is_active": True}
     ]
@@ -27,7 +27,7 @@ def test_agent_targets_returns_active_targets_for_valid_node_key(mock_fetchrow, 
 @patch("rknmon.api.agents.execute", new_callable=AsyncMock)
 @patch("rknmon.api.agents.fetchrow")
 def test_agent_results_ingest_with_node_api_key(mock_fetchrow, mock_execute, mock_fetch, mock_evaluate):
-    mock_fetchrow.return_value = {"id": 7, "name": "rpi-home", "is_active": True}
+    mock_fetchrow.return_value = {"id": 7, "name": "edge-home", "is_active": True}
     mock_fetch.return_value = [{"id": 1, "domain": "youtube.com"}]
 
     payload = {
@@ -73,7 +73,7 @@ def test_agent_register_upserts_probe_node_and_returns_identity(mock_fetchrow, m
         None,
         {
             "id": 7,
-            "name": "rpi-home",
+            "name": "edge-home",
             "is_active": True,
             "location": "home",
             "provider": "domru",
@@ -83,7 +83,7 @@ def test_agent_register_upserts_probe_node_and_returns_identity(mock_fetchrow, m
     ]
 
     payload = {
-        "name": "rpi-home",
+        "name": "edge-home",
         "location": "home",
         "provider": "domru",
         "agent_version": "0.1.0",
@@ -95,7 +95,7 @@ def test_agent_register_upserts_probe_node_and_returns_identity(mock_fetchrow, m
     assert response.status_code == 200
     body = response.json()
     assert body["probe_node_id"] == 7
-    assert body["name"] == "rpi-home"
+    assert body["name"] == "edge-home"
     assert body["registration"] == "legacy"
     assert mock_execute.await_count == 1
     assert "INSERT INTO probe_nodes" in mock_execute.await_args.args[0]
@@ -104,7 +104,7 @@ def test_agent_register_upserts_probe_node_and_returns_identity(mock_fetchrow, m
 @patch("rknmon.api.agents.execute", new_callable=AsyncMock)
 @patch("rknmon.api.agents.fetchrow")
 def test_agent_heartbeat_updates_last_seen_and_returns_ack(mock_fetchrow, mock_execute):
-    mock_fetchrow.return_value = {"id": 7, "name": "rpi-home", "is_active": True}
+    mock_fetchrow.return_value = {"id": 7, "name": "edge-home", "is_active": True}
 
     payload = {
         "agent_version": "0.1.1",
