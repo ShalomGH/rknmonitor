@@ -85,7 +85,7 @@ async def _resolve(host: str, port: int, timeout: float) -> tuple[list[str], flo
         loop.getaddrinfo(host, port, family=2, type=1),
         timeout=timeout,
     )
-    return sorted({item[4][0] for item in infos}), _ms(started)
+    return sorted({item[4][0] for item in infos if isinstance(item[4][0], str)}), _ms(started)
 
 
 def _row(
@@ -166,6 +166,8 @@ async def staged_https_probe(
                 ),
                 timeout=timeout_seconds,
             )
+            if writer is None:
+                raise RuntimeError("open_connection returned no writer")
             ssl_obj = writer.get_extra_info("ssl_object")
             stages.append(_stage(
                 "tls_handshake", True, _ms(started), "ok",
@@ -284,7 +286,9 @@ async def probe_udp_echo(spec: str, timeout: float) -> dict:
             transport.close()
 
 
-def _curl_error(code: int) -> str:
+def _curl_error(code: int | None) -> str:
+    if code is None:
+        return "curl_failed"
     return {
         5: "proxy_dns_failed", 6: "dns_failed", 7: "tcp_connect_failed",
         28: "timeout", 35: "tls_handshake_failed", 55: "send_failed",

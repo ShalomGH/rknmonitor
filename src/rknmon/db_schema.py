@@ -196,12 +196,14 @@ async def init_schema() -> None:
     """Create tables/indexes if missing. Uses advisory lock #1 to avoid races."""
     pool = await get_pool()
     async with pool.acquire() as conn:
-        locked = await conn.fetchval("SELECT pg_try_advisory_lock(1)")
+        # Override command_timeout for the long DDL bootstrap. The pool default
+        # is 10s which can be too tight on first start against a populated DB.
+        locked = await conn.fetchval("SELECT pg_try_advisory_lock(1)", timeout=300)
         if not locked:
             logger.info("Schema init already in progress by another process, skipping")
             return
         try:
-            await conn.execute(SCHEMA_SQL)
+            await conn.execute(SCHEMA_SQL, timeout=300)
             logger.info("Schema initialized")
         except asyncpg.exceptions.UniqueViolationError:
             logger.info("Race on index creation, ignoring")

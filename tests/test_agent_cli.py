@@ -22,6 +22,7 @@ async def test_main_async_runs_one_cycle_when_once_flag_set():
             "rknmon-agent",
             agent_location=None,
             agent_provider=None,
+            agent_role="subject",
             agent_version="0.1.0",
             public_ip=None,
         )

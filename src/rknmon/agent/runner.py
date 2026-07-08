@@ -102,7 +102,9 @@ async def wait_for_tcp_ports(
         raise TimeoutError(f"Timed out waiting for Xray SOCKS ports on {host}: {sorted(pending)}")
 
 
-def _curl_xray_error_type(returncode: int, stderr: str | None) -> str:
+def _curl_xray_error_type(returncode: int | None, stderr: str | None) -> str:
+    if returncode is None:
+        return "curl_failed"
     mapping = {
         5: "proxy_dns_failed",
         6: "destination_dns_failed",
