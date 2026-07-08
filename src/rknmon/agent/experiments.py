@@ -70,10 +70,11 @@ def _stage(name: str, ok: bool, duration_ms: float, outcome: str, **details: Any
 def _ssl_context() -> ssl.SSLContext:
     # Controlled A/B experiments isolate SNI/Host behavior, so certificate
     # validation is intentionally disabled. Use only authorized endpoints.
+    # The raw application request below is HTTP/1.1, therefore do not offer h2.
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
-    ctx.set_alpn_protocols(["h2", "http/1.1"])
+    ctx.set_alpn_protocols(["http/1.1"])
     return ctx
 
 
@@ -128,7 +129,6 @@ async def staged_https_probe(
     total = time.monotonic()
     stages: list[dict] = []
     writer: asyncio.StreamWriter | None = None
-
     try:
         try:
             ips, elapsed = await _resolve(target.host, target.port, timeout_seconds)
@@ -140,15 +140,13 @@ async def staged_https_probe(
             outcome = _outcome(exc, "dns")
             stages.append(_stage("dns", False, _ms(total), outcome))
             return _row(target, checker, variant, False, outcome, total, stages, {
-                "sni": sni,
-                "host_header": host_header,
+                "sni": sni, "host_header": host_header,
             })
 
         started = time.monotonic()
         try:
             _, plain_writer = await asyncio.wait_for(
-                asyncio.open_connection(ip, target.port),
-                timeout=timeout_seconds,
+                asyncio.open_connection(ip, target.port), timeout=timeout_seconds
             )
             stages.append(_stage("tcp_connect", True, _ms(started), "ok", connected_ip=ip))
             plain_writer.close()
@@ -157,28 +155,20 @@ async def staged_https_probe(
             outcome = _outcome(exc, "tcp")
             stages.append(_stage("tcp_connect", False, _ms(started), outcome, connected_ip=ip))
             return _row(target, checker, variant, False, outcome, total, stages, {
-                "resolved_ip": ip,
-                "sni": sni,
-                "host_header": host_header,
+                "resolved_ip": ip, "sni": sni, "host_header": host_header,
             })
 
         started = time.monotonic()
         try:
             reader, writer = await asyncio.wait_for(
                 asyncio.open_connection(
-                    ip,
-                    target.port,
-                    ssl=_ssl_context(),
-                    server_hostname=sni,
+                    ip, target.port, ssl=_ssl_context(), server_hostname=sni
                 ),
                 timeout=timeout_seconds,
             )
             ssl_obj = writer.get_extra_info("ssl_object")
             stages.append(_stage(
-                "tls_handshake",
-                True,
-                _ms(started),
-                "ok",
+                "tls_handshake", True, _ms(started), "ok",
                 tls_version=ssl_obj.version() if ssl_obj else None,
                 cipher=ssl_obj.cipher()[0] if ssl_obj and ssl_obj.cipher() else None,
                 alpn=ssl_obj.selected_alpn_protocol() if ssl_obj else None,
@@ -187,9 +177,7 @@ async def staged_https_probe(
             outcome = _outcome(exc, "tls")
             stages.append(_stage("tls_handshake", False, _ms(started), outcome, connected_ip=ip))
             return _row(target, checker, variant, False, outcome, total, stages, {
-                "resolved_ip": ip,
-                "sni": sni,
-                "host_header": host_header,
+                "resolved_ip": ip, "sni": sni, "host_header": host_header,
             })
 
         started = time.monotonic()
@@ -220,9 +208,7 @@ async def staged_https_probe(
             outcome = _outcome(exc, "http")
             stages.append(_stage("http_first_byte", False, _ms(started), outcome))
             return _row(target, checker, variant, False, outcome, total, stages, {
-                "resolved_ip": ip,
-                "sni": sni,
-                "host_header": host_header,
+                "resolved_ip": ip, "sni": sni, "host_header": host_header,
             })
     finally:
         if writer is not None:
@@ -269,40 +255,28 @@ async def probe_udp_echo(spec: str, timeout: float) -> dict:
         token = f"rknmon-{uuid.uuid4()}".encode()
         protocol = _UdpEcho(token)
         loop = asyncio.get_running_loop()
-        transport, _ = await loop.create_datagram_endpoint(lambda: protocol, remote_addr=(ips[0], port))
+        transport, _ = await loop.create_datagram_endpoint(
+            lambda: protocol, remote_addr=(ips[0], port)
+        )
         data, addr = await asyncio.wait_for(protocol.response, timeout=timeout)
         ok = data == token
         outcome = "ok" if ok else "udp_payload_mismatch"
         return {
-            "checker": "udp-echo",
-            "target": name,
-            "method": "controlled_echo",
-            "ok": ok,
-            "latency_ms": _ms(started),
-            "http_status": None,
-            "error_type": None if ok else outcome,
-            "error": None if ok else outcome,
+            "checker": "udp-echo", "target": name, "method": "controlled_echo",
+            "ok": ok, "latency_ms": _ms(started), "http_status": None,
+            "error_type": None if ok else outcome, "error": None if ok else outcome,
             "details": {
-                "experiment_type": "udp-echo",
-                "resolved_ip": ips[0],
-                "port": port,
-                "dns_duration_ms": dns_ms,
-                "bytes_sent": len(token),
-                "bytes_received": len(data),
-                "peer": f"{addr[0]}:{addr[1]}",
+                "experiment_type": "udp-echo", "resolved_ip": ips[0], "port": port,
+                "dns_duration_ms": dns_ms, "bytes_sent": len(token),
+                "bytes_received": len(data), "peer": f"{addr[0]}:{addr[1]}",
             },
         }
     except Exception as exc:
         outcome = _outcome(exc, "udp")
         return {
-            "checker": "udp-echo",
-            "target": name,
-            "method": "controlled_echo",
-            "ok": False,
-            "latency_ms": _ms(started),
-            "http_status": None,
-            "error_type": outcome,
-            "error": str(exc)[:300] or outcome,
+            "checker": "udp-echo", "target": name, "method": "controlled_echo",
+            "ok": False, "latency_ms": _ms(started), "http_status": None,
+            "error_type": outcome, "error": str(exc)[:300] or outcome,
             "details": {"experiment_type": "udp-echo", "host": host, "port": port},
         }
     finally:
@@ -312,14 +286,9 @@ async def probe_udp_echo(spec: str, timeout: float) -> dict:
 
 def _curl_error(code: int) -> str:
     return {
-        5: "proxy_dns_failed",
-        6: "dns_failed",
-        7: "tcp_connect_failed",
-        28: "timeout",
-        35: "tls_handshake_failed",
-        55: "send_failed",
-        56: "receive_failed",
-        92: "http3_error",
+        5: "proxy_dns_failed", 6: "dns_failed", 7: "tcp_connect_failed",
+        28: "timeout", 35: "tls_handshake_failed", 55: "send_failed",
+        56: "receive_failed", 92: "http3_error",
     }.get(code, "curl_failed")
 
 
@@ -328,30 +297,15 @@ async def probe_http3(url: str, timeout: float) -> dict:
     curl = shutil.which("curl")
     if not curl:
         return {
-            "checker": "http3",
-            "target": url,
-            "method": "curl_http3_only",
-            "ok": False,
-            "latency_ms": _ms(started),
-            "http_status": None,
-            "error_type": "curl_missing",
-            "error": "curl_missing",
+            "checker": "http3", "target": url, "method": "curl_http3_only",
+            "ok": False, "latency_ms": _ms(started), "http_status": None,
+            "error_type": "curl_missing", "error": "curl_missing",
             "details": {"experiment_type": "http3"},
         }
     proc = await asyncio.create_subprocess_exec(
-        curl,
-        "--silent",
-        "--show-error",
-        "--http3-only",
-        "--max-time",
-        str(timeout),
-        "--output",
-        os.devnull,
-        "--write-out",
-        "%{http_code} %{time_total}",
-        url,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
+        curl, "--silent", "--show-error", "--http3-only", "--max-time", str(timeout),
+        "--output", os.devnull, "--write-out", "%{http_code} %{time_total}", url,
+        stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE,
     )
     stdout, stderr = await proc.communicate()
     fields = stdout.decode(errors="replace").split()
@@ -359,12 +313,8 @@ async def probe_http3(url: str, timeout: float) -> dict:
     ok = proc.returncode == 0 and status is not None and 200 <= status < 500
     outcome = None if ok else _curl_error(proc.returncode)
     return {
-        "checker": "http3",
-        "target": url,
-        "method": "curl_http3_only",
-        "ok": ok,
-        "latency_ms": _ms(started),
-        "http_status": status,
+        "checker": "http3", "target": url, "method": "curl_http3_only",
+        "ok": ok, "latency_ms": _ms(started), "http_status": status,
         "error_type": outcome,
         "error": None if ok else (stderr.decode(errors="replace").strip()[:300] or outcome),
         "details": {"experiment_type": "http3", "curl_exit_code": proc.returncode},
@@ -376,7 +326,6 @@ def infer_mechanisms(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
     for row in results:
         if row.get("checker") != "mechanism-inference":
             grouped.setdefault(str(row.get("target")), []).append(row)
-
     inferred: list[dict[str, Any]] = []
     for target, rows in grouped.items():
         candidates: list[tuple[str, float, list[str]]] = []
@@ -387,49 +336,36 @@ def infer_mechanisms(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
             })))
         if any(
             r.get("checker") == "cidrwhitelist"
-            and r.get("error_type") == "cidr_whitelist_suspected"
-            for r in rows
+            and r.get("error_type") == "cidr_whitelist_suspected" for r in rows
         ):
             candidates.append(("allowlisting", 0.78, ["whitelisted_ok_regular_failed"]))
-
         tls = [r for r in rows if r.get("checker") == "tls-ab"]
         if any(r.get("method") == "correct" and not r.get("ok") for r in tls) and any(
             r.get("method") != "correct" and r.get("ok") for r in tls
         ):
             candidates.append(("sni_filter", 0.88, ["same_ip_control_variant_ok", "correct_sni_failed"]))
-
         host = [r for r in rows if r.get("checker") == "host-ab"]
         if any(r.get("method") == "correct" and not r.get("ok") for r in host) and any(
             r.get("method") != "correct" and r.get("ok") for r in host
         ):
             candidates.append(("http_host_filter", 0.88, ["same_tls_control_host_ok", "correct_host_failed"]))
-
         if any(r.get("checker") == "http3" and not r.get("ok") for r in rows):
             candidates.append(("quic_or_udp_interference", 0.45, ["http3_failed"]))
         if any(r.get("checker") == "udp-echo" and not r.get("ok") for r in rows):
             candidates.append(("udp_path_interference", 0.5, ["controlled_udp_echo_failed"]))
         if any(
             str(r.get("error_type") or "").endswith("_reset")
-            or r.get("error_type") == "connection_reset"
-            for r in rows
+            or r.get("error_type") == "connection_reset" for r in rows
         ):
             candidates.append(("rst_or_tcp_interference", 0.55, ["reset_observed"]))
-
         for mechanism, confidence, evidence in candidates:
             inferred.append({
-                "checker": "mechanism-inference",
-                "target": target,
-                "method": mechanism,
-                "ok": False,
-                "latency_ms": None,
-                "http_status": None,
-                "error_type": mechanism,
-                "error": None,
+                "checker": "mechanism-inference", "target": target, "method": mechanism,
+                "ok": False, "latency_ms": None, "http_status": None,
+                "error_type": mechanism, "error": None,
                 "details": {
-                    "experiment_type": "mechanism-inference",
-                    "hypothesis": mechanism,
-                    "confidence": confidence,
-                    "evidence": evidence,
+                    "experiment_type": "mechanism-inference", "hypothesis": mechanism,
+                    "confidence": confidence, "evidence": evidence,
                 },
             })
     return inferred
@@ -454,54 +390,36 @@ async def run_experimental_probes(
         trace_on_anomaly=trace_on_anomaly,
     )
     results: list[dict[str, Any]] = []
-
     for target in targets:
         for variant in (sni_variants or ["correct", "none", "bogus.invalid"]):
             sni = target.host if variant == "correct" else (None if variant == "none" else variant)
             results.append(await collector.run(
-                experiment_id=str(uuid.uuid4()),
-                host=target.host,
-                port=target.port,
+                experiment_id=str(uuid.uuid4()), host=target.host, port=target.port,
                 probe=lambda t=target, v=variant, s=sni: staged_https_probe(
-                    t,
-                    checker="tls-ab",
-                    variant=v,
-                    sni=s,
-                    host_header=t.host,
+                    t, checker="tls-ab", variant=v, sni=s, host_header=t.host,
                     timeout_seconds=timeout_seconds,
                 ),
             ))
         for variant in host_variants:
             host_header = target.host if variant == "correct" else variant
             results.append(await collector.run(
-                experiment_id=str(uuid.uuid4()),
-                host=target.host,
-                port=target.port,
+                experiment_id=str(uuid.uuid4()), host=target.host, port=target.port,
                 probe=lambda t=target, v=variant, h=host_header: staged_https_probe(
-                    t,
-                    checker="host-ab",
-                    variant=v,
-                    sni=t.host,
-                    host_header=h,
+                    t, checker="host-ab", variant=v, sni=t.host, host_header=h,
                     timeout_seconds=timeout_seconds,
                 ),
             ))
-
     for spec in udp_targets:
         _, value = (spec.split("=", 1) if "=" in spec else (spec, spec))
         host, port_s = value.rsplit(":", 1)
         results.append(await collector.run(
-            experiment_id=str(uuid.uuid4()),
-            host=host,
-            port=int(port_s),
+            experiment_id=str(uuid.uuid4()), host=host, port=int(port_s),
             probe=lambda item=spec: probe_udp_echo(item, timeout_seconds),
         ))
-
     for url in http3_targets:
         parsed = urlparse(url)
         results.append(await collector.run(
-            experiment_id=str(uuid.uuid4()),
-            host=parsed.hostname or url,
+            experiment_id=str(uuid.uuid4()), host=parsed.hostname or url,
             port=parsed.port or 443,
             probe=lambda item=url: probe_http3(item, timeout_seconds),
         ))
