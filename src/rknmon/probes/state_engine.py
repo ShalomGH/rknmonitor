@@ -1,17 +1,46 @@
 from __future__ import annotations
+
 import json
 import logging
-from rknmon.db import fetchrow, execute
-from rknmon.probes.classifier import State
+
 from rknmon.custom_metrics import ensure_event_metric, record_event, update_target_state_metrics
+from rknmon.db import execute, fetchrow
+from rknmon.probes.classifier import State
 
 logger = logging.getLogger(__name__)
 
 
 async def _update_state_counts():
     from rknmon.db import fetch
-    rows = await fetch("SELECT state, COUNT(*) AS n FROM target_states GROUP BY state")
-    update_target_state_metrics({r["state"]: r["n"] for r in rows})
+
+    node_rows = await fetch("SELECT state, COUNT(*) AS n FROM target_states GROUP BY state")
+    global_rows = await fetch(
+        """
+        SELECT global_state AS state, COUNT(*) AS n
+        FROM (
+            SELECT
+                target_id,
+                CASE MAX(
+                    CASE state
+                        WHEN 'blocked' THEN 2
+                        WHEN 'suspected' THEN 1
+                        ELSE 0
+                    END
+                )
+                    WHEN 2 THEN 'blocked'
+                    WHEN 1 THEN 'suspected'
+                    ELSE 'clear'
+                END AS global_state
+            FROM target_states
+            GROUP BY target_id
+        ) aggregated
+        GROUP BY global_state
+        """
+    )
+    update_target_state_metrics(
+        {r["state"]: r["n"] for r in global_rows},
+        {r["state"]: r["n"] for r in node_rows},
+    )
 
 
 async def refresh_target_state_metrics():
@@ -72,7 +101,14 @@ async def update_target_state(
         new_state,
         json.dumps({"probe_node_id": probe_node_id, **details}),
     )
-    logger.info(f"Target {target_id} on node {probe_node_id}: {old_state} -> {new_state} ({event_type})")
+    logger.info(
+        "Target %s on node %s: %s -> %s (%s)",
+        target_id,
+        probe_node_id,
+        old_state,
+        new_state,
+        event_type,
+    )
     record_event(event_type)
     await refresh_target_state_metrics()
     return dict(event) if event else None
