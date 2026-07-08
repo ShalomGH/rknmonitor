@@ -10,6 +10,7 @@ from rknmon.custom_metrics import (
     prune_xray_profile_metrics,
     record_dpi_probe,
     record_probe_latency,
+    record_probe_result,
     record_subscription_health,
     record_xray_probe,
 )
@@ -39,7 +40,7 @@ async def _get_probe_node(request: Request) -> dict:
     if not api_key:
         raise HTTPException(status_code=403, detail="Forbidden: missing node API key")
     row = await fetchrow(
-        "SELECT id, name, is_active FROM probe_nodes WHERE api_key = $1",
+        "SELECT id, name, role, is_active FROM probe_nodes WHERE api_key = $1",
         api_key,
     )
     if not row or not row.get("is_active", False):
@@ -48,18 +49,8 @@ async def _get_probe_node(request: Request) -> dict:
 
 
 def _is_self_registration_via_invite() -> bool:
-    """Whether /agent/register is allowed to register via X-Node-API-Key directly.
-
-    Default is False for public installs: a stray API key in a Telegram chat
-    could register an attacker-controlled node. We only keep the
-    self-registration fallback for trusted/lan deployments when the
-    RKNMON_ALLOW_DIRECT_REGISTRATION env flag is set.
-    """
-    import os
     return os.getenv("RKNMON_ALLOW_DIRECT_REGISTRATION", "false").lower() in {
-        "1",
-        "true",
-        "yes",
+        "1", "true", "yes"
     }
 
 
@@ -69,11 +60,8 @@ async def agent_register(request: Request, payload: AgentRegisterIn):
     if not api_key:
         raise HTTPException(status_code=403, detail="Forbidden: missing node API key")
 
-    # If the client was bootstrapped via /agent/bootstrap, the API key already
-    # exists in the DB. Just refresh last_seen metadata.
     existing = await fetchrow(
-        "SELECT id, name, is_active FROM probe_nodes WHERE api_key = $1",
-        api_key,
+        "SELECT id, name, is_active FROM probe_nodes WHERE api_key = $1", api_key
     )
     if existing:
         await execute(
@@ -84,6 +72,7 @@ async def agent_register(request: Request, payload: AgentRegisterIn):
                 agent_version = COALESCE($3, agent_version),
                 location = COALESCE($4, location),
                 provider = COALESCE($5, provider),
+                role = COALESCE($6, role),
                 is_active = true
             WHERE id = $1
             """,
@@ -92,20 +81,19 @@ async def agent_register(request: Request, payload: AgentRegisterIn):
             payload.agent_version,
             payload.location,
             payload.provider,
+            payload.role,
         )
         return {
             "probe_node_id": existing["id"],
             "name": existing["name"],
             "is_active": existing["is_active"],
+            "role": payload.role,
             "poll_interval_seconds": _poll_interval_seconds(),
             "registration": "existing",
         }
 
-    # No pre-existing node for this key. Two paths:
-    # 1. Bootstrap via invite token: client supplies bootstrap_token.
     if payload.bootstrap_token:
         from rknmon.api.agent_invites import bootstrap_agent
-
         try:
             bootstrap_out, _ = await bootstrap_agent(
                 token=payload.bootstrap_token,
@@ -119,9 +107,6 @@ async def agent_register(request: Request, payload: AgentRegisterIn):
             raise HTTPException(status_code=403, detail=str(exc))
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc))
-
-        # The client just sent a key the central will mint *after* this call.
-        # Tell the client to retry the heartbeat path with the new key instead.
         return {
             "probe_node_id": None,
             "name": bootstrap_out.agent_name,
@@ -131,7 +116,6 @@ async def agent_register(request: Request, payload: AgentRegisterIn):
             "bootstrap": bootstrap_out.model_dump(),
         }
 
-    # 2. Legacy / opt-in direct registration: only when explicitly enabled.
     if not _is_self_registration_via_invite():
         raise HTTPException(
             status_code=403,
@@ -143,12 +127,16 @@ async def agent_register(request: Request, payload: AgentRegisterIn):
 
     await execute(
         """
-        INSERT INTO probe_nodes (name, api_key, location, provider, last_seen_at, last_ip, agent_version, is_active)
-        VALUES ($1, $2, $3, $4, now(), $5, $6, true)
+        INSERT INTO probe_nodes (
+            name, api_key, location, provider, role,
+            last_seen_at, last_ip, agent_version, is_active
+        )
+        VALUES ($1, $2, $3, $4, $5, now(), $6, $7, true)
         ON CONFLICT (api_key) DO UPDATE SET
             name = EXCLUDED.name,
             location = EXCLUDED.location,
             provider = EXCLUDED.provider,
+            role = EXCLUDED.role,
             last_seen_at = now(),
             last_ip = EXCLUDED.last_ip,
             agent_version = EXCLUDED.agent_version,
@@ -158,6 +146,7 @@ async def agent_register(request: Request, payload: AgentRegisterIn):
         api_key,
         payload.location,
         payload.provider,
+        payload.role,
         payload.public_ip,
         payload.agent_version,
     )
@@ -168,6 +157,7 @@ async def agent_register(request: Request, payload: AgentRegisterIn):
         "probe_node_id": row["id"],
         "name": row["name"],
         "is_active": row["is_active"],
+        "role": payload.role,
         "poll_interval_seconds": _poll_interval_seconds(),
         "registration": "legacy",
     }
@@ -184,9 +174,7 @@ async def agent_heartbeat(request: Request, payload: AgentHeartbeatIn):
             agent_version = COALESCE($3, agent_version)
         WHERE id = $1
         """,
-        node["id"],
-        payload.public_ip,
-        payload.agent_version,
+        node["id"], payload.public_ip, payload.agent_version,
     )
     return {
         "probe_node_id": node["id"],
@@ -212,28 +200,35 @@ async def ingest_probe_batch(request: Request, payload: AgentProbeBatchIn):
         [probe.target_id for probe in payload.results],
     )
     target_domains = {int(r["id"]): r["domain"] for r in target_rows}
-
     touched_target_ids: set[int] = set()
+
     for probe in payload.results:
         touched_target_ids.add(probe.target_id)
         await execute(
             """
-            INSERT INTO probes (target_id, probe_node_id, probe_type, status_code, response_time_ms, body_hash, error, resolver, result)
+            INSERT INTO probes (
+                target_id, probe_node_id, probe_type, status_code,
+                response_time_ms, body_hash, error, resolver, result
+            )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
             """,
-            probe.target_id,
-            node["id"],
-            probe.probe_type,
-            probe.status_code,
-            probe.response_time_ms,
-            probe.body_hash,
-            probe.error,
-            probe.resolver,
+            probe.target_id, node["id"], probe.probe_type, probe.status_code,
+            probe.response_time_ms, probe.body_hash, probe.error, probe.resolver,
             json.dumps(probe.result or {}),
         )
+        domain = target_domains.get(probe.target_id, str(probe.target_id))
         if probe.response_time_ms is not None:
-            domain = target_domains.get(probe.target_id, str(probe.target_id))
             record_probe_latency(str(probe.target_id), domain, probe.probe_type, probe.response_time_ms)
+        record_probe_result(
+            agent=node["name"],
+            target_id=str(probe.target_id),
+            domain=domain,
+            probe_type=probe.probe_type,
+            status_code=probe.status_code,
+            error=probe.error,
+            result=probe.result,
+            response_time_ms=probe.response_time_ms,
+        )
 
     await evaluate_targets(sorted(touched_target_ids))
     return {"accepted": len(payload.results), "probe_node_id": node["id"]}
@@ -247,41 +242,26 @@ async def ingest_xray_probe_batch(request: Request, payload: XrayProbeBatchIn):
         await execute(
             """
             INSERT INTO xray_probe_results (
-                probe_node_id, profile_id, profile_name, subscription_name, protocol, transport, security,
-                sni, fingerprint, server_host, server_port, socks_port, test_url, ok,
-                latency_ms, http_status, bytes_downloaded, error_type, error
+                probe_node_id, profile_id, profile_name, subscription_name,
+                protocol, transport, security, sni, fingerprint, server_host,
+                server_port, socks_port, test_url, ok, latency_ms, http_status,
+                bytes_downloaded, error_type, error, details
             )
-            VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+            VALUES (
+                $1, $2, $3, $4, $5, $6, $7, $8, $9, $10,
+                $11, $12, $13, $14, $15, $16, $17, $18, $19, $20
+            )
             """,
-            node["id"],
-            probe.profile_id,
-            probe.profile_name,
-            probe.subscription_name,
-            probe.protocol,
-            probe.transport,
-            probe.security,
-            probe.sni,
-            probe.fingerprint,
-            probe.server_host,
-            probe.server_port,
-            probe.socks_port,
-            probe.test_url,
-            probe.ok,
-            probe.latency_ms,
-            probe.http_status,
-            probe.bytes_downloaded,
-            probe.error_type,
-            probe.error,
+            node["id"], probe.profile_id, probe.profile_name, probe.subscription_name,
+            probe.protocol, probe.transport, probe.security, probe.sni, probe.fingerprint,
+            probe.server_host, probe.server_port, probe.socks_port, probe.test_url,
+            probe.ok, probe.latency_ms, probe.http_status, probe.bytes_downloaded,
+            probe.error_type, probe.error, json.dumps(probe.details or {}),
         )
         subscription = probe.subscription_name or "default"
         label_tuple: XrayProfileLabel = (
-            node["name"],
-            subscription,
-            probe.profile_id,
-            probe.protocol,
-            probe.transport or "unknown",
-            probe.security or "none",
-            probe.server_host,
+            node["name"], subscription, probe.profile_id, probe.protocol,
+            probe.transport or "unknown", probe.security or "none", probe.server_host,
         )
         current_by_subscription.setdefault(subscription, set()).add(label_tuple)
         record_xray_probe(
@@ -295,6 +275,7 @@ async def ingest_xray_probe_batch(request: Request, payload: XrayProbeBatchIn):
             ok=probe.ok,
             latency_ms=probe.latency_ms,
             error_type=probe.error_type,
+            details=probe.details,
         )
     for subscription, current in current_by_subscription.items():
         prune_xray_profile_metrics(node["name"], subscription, current)
@@ -313,15 +294,8 @@ async def ingest_dpi_probe_batch(request: Request, payload: DpiProbeBatchIn):
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
             """,
-            node["id"],
-            probe.checker,
-            probe.target,
-            probe.method,
-            probe.ok,
-            probe.latency_ms,
-            probe.http_status,
-            probe.error_type,
-            probe.error,
+            node["id"], probe.checker, probe.target, probe.method, probe.ok,
+            probe.latency_ms, probe.http_status, probe.error_type, probe.error,
             json.dumps(probe.details or {}),
         )
         record_dpi_probe(
@@ -332,19 +306,13 @@ async def ingest_dpi_probe_batch(request: Request, payload: DpiProbeBatchIn):
             ok=probe.ok,
             latency_ms=probe.latency_ms,
             error_type=probe.error_type,
+            details=probe.details,
         )
     return {"accepted": len(payload.results), "probe_node_id": node["id"]}
 
 
 @router.post("/subscription-health")
 async def ingest_subscription_health(request: Request, payload: SubscriptionHealthBatchIn):
-    """Per-subscription fetch outcome reported by the agent.
-
-    Each cycle the agent tries every XRAY_SUBSCRIPTION_URL one by one and
-    records which provider succeeded / failed with what error. This is how
-    a flaky or dead subscription provider surfaces in the central DB/Grafana
-    without taking down the whole xray probe cycle.
-    """
     node = await _get_probe_node(request)
     for item in payload.items:
         await execute(
@@ -355,14 +323,8 @@ async def ingest_subscription_health(request: Request, payload: SubscriptionHeal
             )
             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
             """,
-            node["id"],
-            item.subscription_name,
-            item.subscription_url,
-            item.ok,
-            item.http_status,
-            item.error_type,
-            item.error,
-            item.profiles_count,
+            node["id"], item.subscription_name, item.subscription_url, item.ok,
+            item.http_status, item.error_type, item.error, item.profiles_count,
         )
         record_subscription_health(
             agent=node["name"],
