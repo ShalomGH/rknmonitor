@@ -3,8 +3,12 @@
 Synthetic target generator for rknmon load testing.
 Inserts N random targets into the database.
 """
-import asyncio, random, string, os, sys
-from rknmon.db import get_pool, close_pool
+import asyncio
+import random
+import string
+import sys
+
+from rknmon.db import close_pool, get_pool
 
 DOMAINS = [
     "example.com", "test.org", "demo.net", "site.io", "page.dev",

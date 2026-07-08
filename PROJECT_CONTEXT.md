@@ -10,7 +10,7 @@
 
 Два режима работы:
 
-1. **Central server** (на `monitor.example.com`, порт `23234` за nginx `8443`) — FastAPI, PostgreSQL, Prometheus, Grafana. Принимает результаты, хранит, отдаёт `/metrics`, даёт дашборд.
+1. **Central server** (на `monitor.example.com`: nginx `:8443` проксирует в app `:8000` внутри Docker; host port `:23234` используется для прямых локальных проверок app) — FastAPI, PostgreSQL, Prometheus, Grafana. Принимает результаты, хранит, отдаёт `/metrics`, даёт дашборд.
 2. **Agent** (любой Linux host/container: VPS, домашний сервер, Raspberry Pi, mini-PC; amd64/arm64/armv7) — периодически проверяет HTTP/DNS-цели, плюс Xray-профили, отправляет результаты в central. Raspberry Pi — только один частный deployment target.
 
 Назначение: узнавать, что блокирует РКН, как работает DPI, и какие Xray-профили реально живые.
@@ -48,7 +48,7 @@
 ├── Dockerfile / Dockerfile.agent
 ├── deploy/README-agent.md                        # deploy guide для edge agent
 ├── docs/superpowers/plans/2026-06-09-xray-monitoring.md
-├── tests/                                        # 59 тестов, pytest
+├── tests/                                        # pytest suite
 ├── AGENTS.md                                     # точка входа для LLM-агентов
 ├── QUICKREF.md                                   # TL;DR карточка
 ├── PROJECT_CONTEXT.md                            # полный LLM-контекст (этот файл)
@@ -72,11 +72,11 @@
 ```text
 ┌───────────────────────────────────────────────────────┐
 │ Central (monitor.example.com)                               │
-│  nginx 8443 → 23234                                   │
-│  rknmon_app :23234  (FastAPI, /metrics, /agent/*)     │
+│  nginx :8443 → app :8000                              │
+│  rknmon_app host :23234 → container :8000             │
 │  rknmon_db   :5432   (Postgres, 127.0.0.1)            │
-│  rknmon_prometheus (scrape rknmon_app:23234/metrics)  │
-│  rknmon_grafana :3000                                 │
+│  rknmon_prometheus (scrape app:8000/metrics)          │
+│  rknmon_grafana (Docker network, via nginx)           │
 └───────────────────────────▲───────────────────────────┘
                             │ HTTPS out, X-Node-API-Key
                             │
@@ -212,14 +212,17 @@ XRAY_READY_TIMEOUT_SECONDS=90
 
 ### Тесты
 
-- `pytest -q` → **59 passed** в `tests/`.
-- Ключевые:
+- `pytest -q` → **90 passed** на 2026-07-08.
+- Ключевые группы:
+  - `test_agent_invites.py` — invite/bootstrap flow
+  - `test_agents_api.py` — agent registration/heartbeat/targets/results
   - `test_xray_subscription.py` — парсер base64 / vless/vmess/trojan/ss
   - `test_xray_agent_runner.py` — runner flow с mock fetch и probe
   - `test_xray_agents_api.py` — ingest endpoint
   - `test_xray_docker_flow.py` — compose skeleton
-  - `test_agents_api.py` — agent registration/heartbeat/targets/results
-  - `test_evaluator_fix.py`, `test_scheduler_graceful.py` и т.п.
+  - `test_dpi_agent.py`, `test_grafana_dpi_dashboard.py` — DPI checks/dashboard
+  - `test_multivantage_*`, `test_dashboard_multivantage.py` — multi-vantage schema/evaluator/dashboard
+  - `test_evaluator_fix.py`, `test_scheduler_graceful.py` — regressions
 
 ---
 
@@ -344,8 +347,8 @@ pytest tests/test_xray_agent_runner.py -v
 - **Тесты:** pytest, pytest-asyncio, mock через `unittest.mock.AsyncMock`/`patch`.
 - **ASCII-only** в коде/Python комментариях и YAML — cyrillic ломает парсинг.
 - **Central:** prod через `docker-compose.prod.yml` + nginx. **Agent:** Docker на любом Linux host/container; Raspberry Pi — частный случай, не архитектурное требование.
-- **Bind `0.0.0.0`** только на nginx `:8443`; всё остальное internal/127.0.0.1.
-- **iptables whitelist** для всех публичных портов (см. skill `secure-server-run`).
+- **Публичный вход** — через nginx `:8443`; host app port `:23234` существует для прямых проверок/админ-доступа и должен быть закрыт firewall/IP whitelist.
+- **iptables whitelist** для всех host-exposed портов (см. skill `secure-server-run`).
 
 ---
 

@@ -8,7 +8,7 @@
 
 ## Ключевое в одном абзаце
 
-Agent (любой Linux host/container: VPS, home server, Raspberry Pi, ARM/x86) outbound-only HTTPS → central (`monitor.example.com:8443` → `23234`). Xray поднимается в sidecar-контейнере `rknmon-xray`, SOCKS-inbound'ы на `127.0.0.1:11001+`. Agent пишет `/config/xray.generated.json`, Xray его ждёт через shell-loop, agent ждёт SOCKS-порты и шлёт пробы через `curl --proxy socks5h://127.0.0.1:<port> <test>`. Результаты → `POST /agent/xray-results`. Хранится в Postgres, экспортируется в Prometheus `rknmon_xray_profile_*`, визуализируется в Grafana dashboard `rknmon-xray` (uid). Подписки на agent host в `.env.xray` как `XRAY_SUBSCRIPTION_URLS` + `XRAY_SUBSCRIPTION_NAMES` (safe labels в том же порядке).
+Agent (любой Linux host/container: VPS, home server, Raspberry Pi, ARM/x86) outbound-only HTTPS → central (`monitor.example.com:8443` → nginx → app `:8000` внутри Docker; host app check `127.0.0.1:23234`). Xray поднимается в sidecar-контейнере `rknmon-xray`, SOCKS-inbound'ы на `127.0.0.1:11001+`. Agent пишет `/config/xray.generated.json`, Xray его ждёт через shell-loop, agent ждёт SOCKS-порты и шлёт пробы через `curl --proxy socks5h://127.0.0.1:<port> <test>`. Результаты → `POST /agent/xray-results`. Хранится в Postgres, экспортируется в Prometheus `rknmon_xray_profile_*`, визуализируется в Grafana dashboard `rknmon-xray` (uid). Подписки на agent host в `.env.xray` как `XRAY_SUBSCRIPTION_URLS` + `XRAY_SUBSCRIPTION_NAMES` (safe labels в том же порядке).
 
 ## Где что
 
