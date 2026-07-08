@@ -43,6 +43,7 @@ async def main_async(argv=None):
         settings.agent_name,
         agent_location=settings.agent_location,
         agent_provider=settings.agent_provider,
+        agent_role=settings.agent_role,
         agent_version=settings.agent_version,
         public_ip=settings.public_ip,
     )
@@ -71,6 +72,15 @@ async def main_async(argv=None):
                     regular_urls=settings.dpi_regular_url_list,
                     timeout_seconds=settings.dpi_timeout_seconds,
                     l4_payload_bytes=settings.dpi_l4_payload_bytes,
+                    experiments_enabled=settings.dpi_experiments_enabled,
+                    experiment_targets=settings.dpi_experiment_target_list,
+                    sni_variants=settings.dpi_sni_variant_list,
+                    host_variants=settings.dpi_host_variant_list,
+                    udp_targets=settings.dpi_udp_target_list,
+                    http3_targets=settings.dpi_http3_target_list,
+                    artifact_dir=settings.dpi_artifact_dir,
+                    capture_on_anomaly=settings.dpi_capture_on_anomaly,
+                    trace_on_anomaly=settings.dpi_trace_on_anomaly,
                 )
             except Exception:
                 logging.exception("dpi probe cycle failed")
