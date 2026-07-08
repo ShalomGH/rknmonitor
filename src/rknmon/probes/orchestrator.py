@@ -9,6 +9,7 @@ from rknmon.config.settings import settings
 from rknmon.custom_metrics import record_probe_latency, record_probe_result, set_active_targets
 from rknmon.db import execute, fetchrow
 from rknmon.probes.dns_probe import probe_dns
+from rknmon.probes.evaluator import evaluate_targets
 from rknmon.probes.http_probe import probe_http
 
 logger = logging.getLogger(__name__)
@@ -120,3 +121,4 @@ async def run_all(targets: List[dict]) -> None:
     probe_node_id = await _central_probe_node_id()
     tasks = [run_probe_for_target(t, semaphore, probe_node_id) for t in targets]
     await asyncio.gather(*tasks, return_exceptions=True)
+    await evaluate_targets([int(target["id"]) for target in targets])
