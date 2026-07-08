@@ -1,6 +1,8 @@
 from datetime import datetime
-from typing import Optional, Literal
+from typing import Literal, Optional
+
 from pydantic import BaseModel, HttpUrl
+
 
 class Target(BaseModel):
     id: Optional[int] = None
@@ -14,6 +16,7 @@ class Target(BaseModel):
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
+
 class ProbeResult(BaseModel):
     id: Optional[int] = None
     target_id: int
@@ -26,6 +29,7 @@ class ProbeResult(BaseModel):
     result: Optional[dict] = None
     checked_at: Optional[datetime] = None
 
+
 class AgentProbeIn(BaseModel):
     target_id: int
     probe_type: Literal["http", "https", "dns"]
@@ -35,6 +39,7 @@ class AgentProbeIn(BaseModel):
     error: Optional[str] = None
     resolver: Optional[str] = None
     result: Optional[dict] = None
+
 
 class AgentProbeBatchIn(BaseModel):
     results: list[AgentProbeIn]
@@ -59,6 +64,7 @@ class XrayProbeIn(BaseModel):
     bytes_downloaded: Optional[int] = None
     error_type: Optional[str] = None
     error: Optional[str] = None
+    details: Optional[dict] = None
 
 
 class XrayProbeBatchIn(BaseModel):
@@ -85,6 +91,7 @@ class AgentRegisterIn(BaseModel):
     name: str
     location: Optional[str] = None
     provider: Optional[str] = None
+    role: Literal["subject", "control", "external"] = "subject"
     agent_version: Optional[str] = None
     public_ip: Optional[str] = None
     bootstrap_token: Optional[str] = None
