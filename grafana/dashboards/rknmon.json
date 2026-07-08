@@ -349,14 +349,14 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "PBFA97CFB590B2093"
       },
       "targets": [
         {
           "refId": "A",
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "PBFA97CFB590B2093"
           },
           "expr": "rknmon_blocking_hypothesis_score",
           "legendFormat": "{{target_id}} {{mechanism}}",
@@ -416,14 +416,14 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "PBFA97CFB590B2093"
       },
       "targets": [
         {
           "refId": "A",
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "PBFA97CFB590B2093"
           },
           "expr": "rknmon_target_node_states",
           "legendFormat": "{{state}}"
@@ -466,14 +466,14 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "PBFA97CFB590B2093"
       },
       "targets": [
         {
           "refId": "A",
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "PBFA97CFB590B2093"
           },
           "expr": "rate(rknmon_probe_artifacts_total[5m])",
           "legendFormat": "{{reason}} / {{type}}"
@@ -514,14 +514,14 @@
       },
       "datasource": {
         "type": "prometheus",
-        "uid": "${DS_PROMETHEUS}"
+        "uid": "PBFA97CFB590B2093"
       },
       "targets": [
         {
           "refId": "A",
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "PBFA97CFB590B2093"
           },
           "expr": "histogram_quantile(0.95, sum by (le, stage) (rate(rknmon_probe_stage_duration_seconds_bucket[5m])))",
           "legendFormat": "p95 {{stage}}"
@@ -530,7 +530,7 @@
           "refId": "B",
           "datasource": {
             "type": "prometheus",
-            "uid": "${DS_PROMETHEUS}"
+            "uid": "PBFA97CFB590B2093"
           },
           "expr": "histogram_quantile(0.50, sum by (le, stage) (rate(rknmon_probe_stage_duration_seconds_bucket[5m])))",
           "legendFormat": "p50 {{stage}}"
