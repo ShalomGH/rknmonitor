@@ -6,10 +6,11 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from prometheus_client import make_asgi_app, Counter, Histogram
 from slowapi.errors import RateLimitExceeded
-from rknmon.custom_metrics import ensure_event_metric, set_active_targets, update_target_state_metrics
+from rknmon.custom_metrics import ensure_event_metric, set_active_targets
 from rknmon.db import get_pool, close_pool, fetch
 from rknmon.db_schema import init_schema
 from rknmon.probes.scheduler import start_scheduler, shutdown_scheduler
+from rknmon.probes.state_engine import refresh_target_state_metrics
 from rknmon.api import targets, events, alerts, probes, stats, export, agents
 from rknmon.api.agent_invites_routes import public_router as agent_bootstrap_router
 from rknmon.api.agent_invites_routes import router as admin_agents_router
@@ -32,8 +33,9 @@ async def hydrate_metrics_from_db() -> None:
     active_row = await fetch("SELECT COUNT(*) AS n FROM targets WHERE is_active = true")
     set_active_targets(int(active_row[0]["n"]) if active_row else 0)
 
-    state_rows = await fetch("SELECT state, COUNT(*) AS n FROM target_states GROUP BY state")
-    update_target_state_metrics({r["state"]: r["n"] for r in state_rows})
+    # Use the same role-aware aggregation as runtime updates. Otherwise a restart
+    # would temporarily restore the old "worst state across every role" semantics.
+    await refresh_target_state_metrics()
 
     event_rows = await fetch("SELECT DISTINCT event_type FROM events")
     for row in event_rows:
@@ -90,7 +92,7 @@ async def install_agent_script():
 async def public_agent_compose():
     return FileResponse(
         PUBLIC_AGENT_COMPOSE,
-        media_type="application/yaml; charset=utf-8",
+        media_type="application/yaml",
         filename="docker-compose.agent.public.yml",
     )
 
