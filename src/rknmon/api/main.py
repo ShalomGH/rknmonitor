@@ -92,7 +92,7 @@ async def install_agent_script():
 async def public_agent_compose():
     return FileResponse(
         PUBLIC_AGENT_COMPOSE,
-        media_type="application/yaml",
+        media_type="application/yaml; charset=utf-8",
         filename="docker-compose.agent.public.yml",
     )
 
