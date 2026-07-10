@@ -1,4 +1,5 @@
-from rknmon.agent.experiments import infer_mechanisms, parse_experiment_target
+from rknmon.agent.experiments import parse_experiment_target
+from rknmon.agent.inference import infer_mechanisms
 from rknmon.custom_metrics import classify_probe_outcome
 
 
@@ -32,6 +33,7 @@ def test_infer_sni_filter_from_same_target_ab_divergence():
         row["method"] == "sni_filter" and row["details"]["confidence"] >= 0.8
         for row in inferred
     )
+    assert all(row["ok"] is True for row in inferred)
 
 
 def test_infer_host_filter_from_same_tls_ab_divergence():

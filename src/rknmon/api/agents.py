@@ -15,6 +15,7 @@ from rknmon.custom_metrics import (
     record_xray_probe,
 )
 from rknmon.db import execute, fetch, fetchrow
+from rknmon.dpi_vantage import adjust_hypothesis_with_vantage
 from rknmon.models.schemas import (
     AgentHeartbeatIn,
     AgentProbeBatchIn,
@@ -35,6 +36,10 @@ def _poll_interval_seconds() -> int:
         return int(os.getenv("PROBE_INTERVAL_SECONDS", "300"))
 
 
+def _dpi_vantage_match_window_seconds() -> int:
+    return int(os.getenv("DPI_VANTAGE_MATCH_WINDOW_SECONDS", "900"))
+
+
 async def _get_probe_node(request: Request) -> dict:
     api_key = request.headers.get("X-Node-API-Key")
     if not api_key:
@@ -46,6 +51,37 @@ async def _get_probe_node(request: Request) -> dict:
     if not row or not row.get("is_active", False):
         raise HTTPException(status_code=403, detail="Forbidden: invalid node API key")
     return dict(row)
+
+
+async def _corroborate_dpi_hypothesis(node: dict, probe) -> dict:
+    details = dict(probe.details or {})
+    if (
+        node.get("role") != "subject"
+        or probe.checker != "mechanism-inference"
+        or details.get("hypothesis") != "dns_interference"
+    ):
+        return details
+
+    rows = await fetch(
+        """
+        SELECT DISTINCT ON (n.id)
+            n.name AS agent,
+            n.role,
+            d.ok,
+            d.error_type,
+            d.checked_at
+        FROM dpi_probe_results d
+        JOIN probe_nodes n ON n.id = d.probe_node_id
+        WHERE d.checker = 'dns'
+          AND d.target = $1
+          AND n.role IN ('control', 'external')
+          AND d.checked_at >= now() - ($2::double precision * interval '1 second')
+        ORDER BY n.id, d.checked_at DESC
+        """,
+        probe.target,
+        float(_dpi_vantage_match_window_seconds()),
+    )
+    return adjust_hypothesis_with_vantage(details, [dict(row) for row in rows])
 
 
 def _is_self_registration_via_invite() -> bool:
@@ -286,6 +322,7 @@ async def ingest_xray_probe_batch(request: Request, payload: XrayProbeBatchIn):
 async def ingest_dpi_probe_batch(request: Request, payload: DpiProbeBatchIn):
     node = await _get_probe_node(request)
     for probe in payload.results:
+        details = await _corroborate_dpi_hypothesis(node, probe)
         await execute(
             """
             INSERT INTO dpi_probe_results (
@@ -296,7 +333,7 @@ async def ingest_dpi_probe_batch(request: Request, payload: DpiProbeBatchIn):
             """,
             node["id"], probe.checker, probe.target, probe.method, probe.ok,
             probe.latency_ms, probe.http_status, probe.error_type, probe.error,
-            json.dumps(probe.details or {}),
+            json.dumps(details),
         )
         record_dpi_probe(
             agent=node["name"],
@@ -306,7 +343,7 @@ async def ingest_dpi_probe_batch(request: Request, payload: DpiProbeBatchIn):
             ok=probe.ok,
             latency_ms=probe.latency_ms,
             error_type=probe.error_type,
-            details=probe.details,
+            details=details,
         )
     return {"accepted": len(payload.results), "probe_node_id": node["id"]}
 
