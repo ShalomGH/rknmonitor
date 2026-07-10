@@ -5,9 +5,12 @@ from fastapi import APIRouter, HTTPException, Request
 
 from rknmon.agent.config import AgentSettings
 from rknmon.custom_metrics import (
+    HypothesisLabel,
     XrayProfileLabel,
     clear_xray_profile_metrics,
+    prune_blocking_hypothesis_metrics,
     prune_xray_profile_metrics,
+    record_agent_seen,
     record_dpi_probe,
     record_probe_latency,
     record_probe_result,
@@ -48,6 +51,13 @@ async def _get_probe_node(request: Request) -> dict:
     return dict(row)
 
 
+def _record_node_activity(node: dict) -> None:
+    record_agent_seen(
+        agent=str(node["name"]),
+        role=str(node.get("role") or "subject"),
+    )
+
+
 def _is_self_registration_via_invite() -> bool:
     return os.getenv("RKNMON_ALLOW_DIRECT_REGISTRATION", "false").lower() in {
         "1", "true", "yes"
@@ -83,6 +93,7 @@ async def agent_register(request: Request, payload: AgentRegisterIn):
             payload.provider,
             payload.role,
         )
+        record_agent_seen(existing["name"], payload.role)
         return {
             "probe_node_id": existing["id"],
             "name": existing["name"],
@@ -153,6 +164,7 @@ async def agent_register(request: Request, payload: AgentRegisterIn):
     row = await fetchrow("SELECT id, name, is_active FROM probe_nodes WHERE api_key = $1", api_key)
     if not row:
         raise HTTPException(status_code=500, detail="Probe node registration failed")
+    record_agent_seen(row["name"], payload.role)
     return {
         "probe_node_id": row["id"],
         "name": row["name"],
@@ -176,6 +188,7 @@ async def agent_heartbeat(request: Request, payload: AgentHeartbeatIn):
         """,
         node["id"], payload.public_ip, payload.agent_version,
     )
+    _record_node_activity(node)
     return {
         "probe_node_id": node["id"],
         "status": "ok",
@@ -185,7 +198,8 @@ async def agent_heartbeat(request: Request, payload: AgentHeartbeatIn):
 
 @router.get("/targets")
 async def agent_targets(request: Request):
-    await _get_probe_node(request)
+    node = await _get_probe_node(request)
+    _record_node_activity(node)
     rows = await fetch(
         "SELECT id, url, domain, category, is_active FROM targets WHERE is_active = true ORDER BY id"
     )
@@ -195,6 +209,7 @@ async def agent_targets(request: Request):
 @router.post("/results")
 async def ingest_probe_batch(request: Request, payload: AgentProbeBatchIn):
     node = await _get_probe_node(request)
+    _record_node_activity(node)
     target_rows = await fetch(
         "SELECT id, domain FROM targets WHERE id = any($1)",
         [probe.target_id for probe in payload.results],
@@ -218,7 +233,13 @@ async def ingest_probe_batch(request: Request, payload: AgentProbeBatchIn):
         )
         domain = target_domains.get(probe.target_id, str(probe.target_id))
         if probe.response_time_ms is not None:
-            record_probe_latency(str(probe.target_id), domain, probe.probe_type, probe.response_time_ms)
+            record_probe_latency(
+                node["name"],
+                str(probe.target_id),
+                domain,
+                probe.probe_type,
+                probe.response_time_ms,
+            )
         record_probe_result(
             agent=node["name"],
             target_id=str(probe.target_id),
@@ -237,6 +258,7 @@ async def ingest_probe_batch(request: Request, payload: AgentProbeBatchIn):
 @router.post("/xray-results")
 async def ingest_xray_probe_batch(request: Request, payload: XrayProbeBatchIn):
     node = await _get_probe_node(request)
+    _record_node_activity(node)
     current_by_subscription: dict[str, set[XrayProfileLabel]] = {}
     for probe in payload.results:
         await execute(
@@ -285,6 +307,8 @@ async def ingest_xray_probe_batch(request: Request, payload: XrayProbeBatchIn):
 @router.post("/dpi-results")
 async def ingest_dpi_probe_batch(request: Request, payload: DpiProbeBatchIn):
     node = await _get_probe_node(request)
+    _record_node_activity(node)
+    current_hypotheses: set[HypothesisLabel] = set()
     for probe in payload.results:
         await execute(
             """
@@ -298,7 +322,7 @@ async def ingest_dpi_probe_batch(request: Request, payload: DpiProbeBatchIn):
             probe.latency_ms, probe.http_status, probe.error_type, probe.error,
             json.dumps(probe.details or {}),
         )
-        record_dpi_probe(
+        hypothesis_label = record_dpi_probe(
             agent=node["name"],
             checker=probe.checker,
             target=probe.target,
@@ -308,12 +332,17 @@ async def ingest_dpi_probe_batch(request: Request, payload: DpiProbeBatchIn):
             error_type=probe.error_type,
             details=probe.details,
         )
+        if hypothesis_label is not None:
+            current_hypotheses.add(hypothesis_label)
+
+    prune_blocking_hypothesis_metrics(node["name"], current_hypotheses)
     return {"accepted": len(payload.results), "probe_node_id": node["id"]}
 
 
 @router.post("/subscription-health")
 async def ingest_subscription_health(request: Request, payload: SubscriptionHealthBatchIn):
     node = await _get_probe_node(request)
+    _record_node_activity(node)
     for item in payload.items:
         await execute(
             """
