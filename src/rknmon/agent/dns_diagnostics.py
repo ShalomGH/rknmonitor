@@ -15,12 +15,37 @@ from rknmon.agent.dpi import DpiTarget
 
 
 _DOH_RESOLVERS = {
-    "doh_cloudflare": "https://cloudflare-dns.com/dns-query",
-    "doh_google": "https://dns.google/resolve",
+    "doh_cloudflare": ("https://cloudflare-dns.com/dns-query", "1.1.1.1"),
+    "doh_google": ("https://dns.google/resolve", "8.8.8.8"),
 }
 _DOT_HOST = "1.1.1.1"
 _DOT_TLS_NAME = "cloudflare-dns.com"
 _DOT_PORT = 853
+
+
+class _PinnedResolver(aiohttp.abc.AbstractResolver):
+    def __init__(self, ip: str):
+        self.ip = ip
+
+    async def resolve(
+        self,
+        host: str,
+        port: int = 0,
+        family: int = socket.AF_INET,
+    ) -> list[dict[str, Any]]:
+        return [
+            {
+                "hostname": host,
+                "host": self.ip,
+                "port": port,
+                "family": socket.AF_INET,
+                "proto": 0,
+                "flags": 0,
+            }
+        ]
+
+    async def close(self) -> None:
+        return None
 
 
 async def _resolve_system(host: str, timeout_seconds: float) -> list[str]:
@@ -33,11 +58,26 @@ async def _resolve_system(host: str, timeout_seconds: float) -> list[str]:
     return await asyncio.wait_for(loop.run_in_executor(None, resolve), timeout=timeout_seconds)
 
 
-async def _resolve_doh(host: str, url: str, timeout_seconds: float) -> list[str]:
+async def _resolve_doh(
+    host: str,
+    url: str,
+    endpoint_ip: str,
+    timeout_seconds: float,
+) -> list[str]:
     timeout = aiohttp.ClientTimeout(total=timeout_seconds)
     headers = {"accept": "application/dns-json"}
     params = {"name": host, "type": "A"}
-    async with aiohttp.ClientSession(timeout=timeout, headers=headers, trust_env=False) as session:
+    connector = aiohttp.TCPConnector(
+        resolver=_PinnedResolver(endpoint_ip),
+        family=socket.AF_INET,
+        use_dns_cache=False,
+    )
+    async with aiohttp.ClientSession(
+        timeout=timeout,
+        headers=headers,
+        connector=connector,
+        trust_env=False,
+    ) as session:
         async with session.get(url, params=params) as resp:
             resp.raise_for_status()
             data = await resp.json(content_type=None)
@@ -133,7 +173,8 @@ async def _resolve_dot(host: str, timeout_seconds: float) -> list[str]:
     try:
         writer.write(struct.pack("!H", len(query)) + query)
         await asyncio.wait_for(writer.drain(), timeout=timeout_seconds)
-        size = struct.unpack("!H", await asyncio.wait_for(reader.readexactly(2), timeout=timeout_seconds))[0]
+        size_raw = await asyncio.wait_for(reader.readexactly(2), timeout=timeout_seconds)
+        size = struct.unpack("!H", size_raw)[0]
         packet = await asyncio.wait_for(reader.readexactly(size), timeout=timeout_seconds)
         return _parse_a_answers(packet, query_id)
     finally:
@@ -191,9 +232,7 @@ def classify_dns_evidence(
     successful_references = {
         name: sorted(set(ips)) for name, ips in reference_answers.items() if ips
     }
-    reference_union = {
-        ip for ips in successful_references.values() for ip in ips
-    }
+    reference_union = {ip for ips in successful_references.values() for ip in ips}
     overlap = sorted(system_set & reference_union)
     block_ips = sorted(ip for ip in system_set if _looks_block_ip(ip))
     system_reachable = any(tcp_reachability.get(ip, False) for ip in system_set)
@@ -247,70 +286,88 @@ def classify_dns_evidence(
     return True, None, evidence
 
 
-async def probe_dns_interference(
-    targets: list[DpiTarget], timeout_seconds: float
-) -> list[dict[str, Any]]:
-    results: list[dict[str, Any]] = []
-    for target in targets:
-        started = time.monotonic()
+async def _probe_dns_target(
+    target: DpiTarget,
+    timeout_seconds: float,
+) -> dict[str, Any]:
+    started = time.monotonic()
+    reference_timeout = min(timeout_seconds, 5.0)
 
-        system_ips: list[str] = []
-        system_error: str | None = None
+    system_task = asyncio.create_task(_resolve_system(target.host, timeout_seconds))
+    reference_tasks = {
+        name: asyncio.create_task(
+            _resolve_doh(target.host, url, endpoint_ip, reference_timeout)
+        )
+        for name, (url, endpoint_ip) in _DOH_RESOLVERS.items()
+    }
+    reference_tasks["dot_cloudflare"] = asyncio.create_task(
+        _resolve_dot(target.host, reference_timeout)
+    )
+
+    system_ips: list[str] = []
+    system_error: str | None = None
+    try:
+        system_ips = await system_task
+    except Exception as exc:
+        system_error = str(exc) or exc.__class__.__name__
+
+    reference_answers: dict[str, list[str]] = {}
+    reference_errors: dict[str, str] = {}
+    for name, task in reference_tasks.items():
         try:
-            system_ips = await _resolve_system(target.host, timeout_seconds)
+            reference_answers[name] = await task
         except Exception as exc:
-            system_error = str(exc) or exc.__class__.__name__
+            reference_errors[name] = str(exc) or exc.__class__.__name__
 
-        reference_tasks = {
-            name: asyncio.create_task(_resolve_doh(target.host, url, timeout_seconds))
-            for name, url in _DOH_RESOLVERS.items()
-        }
-        reference_tasks["dot_cloudflare"] = asyncio.create_task(
-            _resolve_dot(target.host, timeout_seconds)
+    reference_union = sorted({ip for ips in reference_answers.values() for ip in ips})
+    overlap = bool(set(system_ips) & set(reference_union))
+    need_tcp_confirmation = bool(
+        system_error or not system_ips or (reference_union and not overlap)
+    )
+    tcp_reachability: dict[str, bool] = {}
+    if need_tcp_confirmation:
+        candidates = list(dict.fromkeys(system_ips[:4] + reference_union[:4]))
+        reachability = await asyncio.gather(
+            *(_tcp_reachable(ip, target.port, timeout_seconds) for ip in candidates)
         )
+        tcp_reachability = dict(zip(candidates, reachability))
 
-        reference_answers: dict[str, list[str]] = {}
-        reference_errors: dict[str, str] = {}
-        for name, task in reference_tasks.items():
-            try:
-                reference_answers[name] = await task
-            except Exception as exc:
-                reference_errors[name] = str(exc) or exc.__class__.__name__
+    ok, error_type, evidence = classify_dns_evidence(
+        system_ips=system_ips,
+        reference_answers=reference_answers,
+        system_error=system_error,
+        reference_errors=reference_errors,
+        tcp_reachability=tcp_reachability,
+    )
+    evidence["host"] = target.host
+    evidence["port"] = target.port
+    evidence["reference_endpoints_pinned"] = {
+        name: endpoint_ip for name, (_, endpoint_ip) in _DOH_RESOLVERS.items()
+    }
 
-        reference_union = sorted(
-            {ip for ips in reference_answers.values() for ip in ips}
+    return {
+        "checker": "dns",
+        "target": target.name,
+        "method": "system_vs_doh_dot_tcp",
+        "ok": ok,
+        "latency_ms": int((time.monotonic() - started) * 1000),
+        "http_status": None,
+        "error_type": error_type,
+        "error": (
+            system_error
+            if not ok and error_type == "dns_system_failure_unconfirmed"
+            else None
+        ),
+        "details": evidence,
+    }
+
+
+async def probe_dns_interference(
+    targets: list[DpiTarget],
+    timeout_seconds: float,
+) -> list[dict[str, Any]]:
+    return list(
+        await asyncio.gather(
+            *(_probe_dns_target(target, timeout_seconds) for target in targets)
         )
-        overlap = bool(set(system_ips) & set(reference_union))
-        need_tcp_confirmation = bool(system_error or not system_ips or (reference_union and not overlap))
-        tcp_reachability: dict[str, bool] = {}
-        if need_tcp_confirmation:
-            candidates = list(dict.fromkeys(system_ips[:2] + reference_union[:2]))
-            reachability = await asyncio.gather(
-                *(_tcp_reachable(ip, target.port, timeout_seconds) for ip in candidates)
-            )
-            tcp_reachability = dict(zip(candidates, reachability))
-
-        ok, error_type, evidence = classify_dns_evidence(
-            system_ips=system_ips,
-            reference_answers=reference_answers,
-            system_error=system_error,
-            reference_errors=reference_errors,
-            tcp_reachability=tcp_reachability,
-        )
-        evidence["host"] = target.host
-        evidence["port"] = target.port
-
-        results.append(
-            {
-                "checker": "dns",
-                "target": target.name,
-                "method": "system_vs_doh_dot_tcp",
-                "ok": ok,
-                "latency_ms": int((time.monotonic() - started) * 1000),
-                "http_status": None,
-                "error_type": error_type,
-                "error": system_error if not ok and error_type == "dns_system_failure_unconfirmed" else None,
-                "details": evidence,
-            }
-        )
-    return results
+    )
