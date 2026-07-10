@@ -5,13 +5,10 @@ import time
 from pathlib import Path
 from typing import Awaitable, Callable
 
-from rknmon.agent.dpi import (
-    parse_target_list,
-    probe_cidrwhitelist,
-    probe_dns_interference,
-    probe_l4_25,
-)
-from rknmon.agent.experiments import infer_mechanisms, run_experimental_probes
+from rknmon.agent.dns_diagnostics import probe_dns_interference
+from rknmon.agent.dpi import parse_target_list, probe_cidrwhitelist, probe_l4_25
+from rknmon.agent.experiments import run_experimental_probes
+from rknmon.agent.inference import infer_mechanisms
 from rknmon.agent.xray import XrayProfile, build_xray_config, load_profiles_with_status
 from rknmon.probes.dns_probe import probe_dns as default_probe_dns
 from rknmon.probes.http_probe import probe_http as default_probe_http
