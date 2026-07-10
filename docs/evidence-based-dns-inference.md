@@ -30,7 +30,7 @@ The inference layer emits `dns_interference` only for stronger evidence classes:
 
 - `dns_block_ip` — system DNS returned a loopback/private/link-local/reserved-like address; base score `0.92`;
 - `dns_mismatch_confirmed` — system answers do not overlap references, system IPs are not TCP-reachable, at least two reference methods returned answers and a reference IP is TCP-reachable; base score `0.88`;
-- `dns_resolution_failure_confirmed` — system resolution failed or returned no A records, at least two reference methods returned answers and a reference IP is TCP-reachable; base score `0.82`.
+- `dns_resolution_failure_confirmed` — system resolution failed or returned no A records, at least two reference methods returned answers and a reference IP is TCP-reachable; base score `0.68` because a local resolver outage can look identical.
 
 Generic resolver exceptions and timeouts are kept as failures but are **not** automatically promoted to a blocking-mechanism hypothesis.
 
