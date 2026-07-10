@@ -20,18 +20,40 @@ Central scheduler probes are stored as an internal `control` node instead of
 `probe_node_id=NULL`, so they participate in multi-vantage evaluation without
 creating an API credential.
 
+Subject failures are compared with `control` / `external` results for the same
+target only when both measurements are fresh and fall inside the configured
+matching window. The default is 900 seconds and can be changed with:
+
+```env
+VANTAGE_MATCH_WINDOW_SECONDS=900
+```
+
+A fresh reachable comparison path can upgrade a failing subject result to
+`blocked`. A stale comparison result is ignored. Global target state prefers the
+worst `subject` state; `control` and `external` failures do not make a target
+globally blocked when subject rows exist.
+
 ## Metrics
 
 Ordinary probes:
 
 - `rknmon_probe_status{agent,target_id,domain,probe_type}`
+- `rknmon_probe_latest_response_ms{agent,target_id,domain,probe_type}`
 - `rknmon_probe_results_total{agent,probe_type,outcome}`
 - `rknmon_probe_duration_seconds{agent,probe_type,outcome}`
 
+Freshness:
+
+- `rknmon_agent_last_seen_timestamp_seconds{agent,role}`
+- `rknmon_probe_last_completed_timestamp_seconds{agent,probe_type}`
+- `rknmon_probe_last_success_timestamp_seconds{agent,probe_type}`
+- `rknmon_blocking_hypothesis_last_evidence_timestamp_seconds{agent,target,mechanism}`
+
 State semantics:
 
-- `rknmon_targets_by_state{state}` counts unique targets after worst-state
-  aggregation across vantages;
+- `rknmon_targets_by_state{state}` counts unique targets using worst-state
+  aggregation across `subject` vantages; if a target has no subject row, it
+  falls back to all available roles;
 - `rknmon_target_node_states{state}` counts raw target+node state rows.
 
 Stage and experiment metrics:
@@ -39,6 +61,10 @@ Stage and experiment metrics:
 - `rknmon_probe_stage_duration_seconds{agent,experiment_type,stage,outcome}`
 - `rknmon_dpi_check_duration_seconds{agent,checker,method,outcome}`
 - `rknmon_blocking_hypothesis_score{agent,target,mechanism}`
+
+Hypothesis gauges are cycle-scoped per agent. When a hypothesis is absent from
+the next submitted DPI batch, its score and last-evidence timestamp series are
+removed instead of remaining stale indefinitely.
 
 Xray:
 
