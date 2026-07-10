@@ -45,7 +45,10 @@ def _b64decode_maybe(value: str) -> str | None:
             decoded = base64.b64decode((text + padding).encode()).decode("utf-8")
         except Exception:
             return None
-    if any(scheme in decoded for scheme in ("vless://", "vmess://", "trojan://", "ss://")):
+    if any(
+        scheme in decoded
+        for scheme in ("vless://", "vmess://", "trojan://", "ss://", "hy2://", "hysteria2://")
+    ):
         return decoded
     return None
 
@@ -61,7 +64,7 @@ def parse_subscription_text(text: str, subscription_name: str = "default") -> li
     for line in _subscription_lines(text):
         if line.startswith("vmess://"):
             profile = _parse_vmess(line)
-        elif line.startswith(("vless://", "trojan://", "ss://")):
+        elif line.startswith(("vless://", "trojan://", "ss://", "hy2://", "hysteria2://")):
             profile = _parse_standard_link(line)
         else:
             profile = None
@@ -114,18 +117,18 @@ def _parse_vmess(raw_url: str) -> XrayProfile | None:
 
 def _parse_standard_link(raw_url: str) -> XrayProfile | None:
     parsed = urlparse(raw_url)
-    if parsed.scheme not in {"vless", "trojan", "ss"} or not parsed.hostname:
+    if parsed.scheme not in {"vless", "trojan", "ss", "hy2", "hysteria2"} or not parsed.hostname:
         return None
     query = {k: v[0] for k, v in parse_qs(parsed.query).items() if v}
     name = unquote(parsed.fragment) if parsed.fragment else f"{parsed.scheme}-{parsed.hostname}"
     return XrayProfile(
         name=name,
-        protocol=parsed.scheme,
+        protocol="hysteria" if parsed.scheme in {"hy2", "hysteria2"} else parsed.scheme,
         host=parsed.hostname,
         port=int(parsed.port or 443),
         raw_url=raw_url,
-        transport=query.get("type") or query.get("transport") or "tcp",
-        security=query.get("security") or query.get("tls"),
+        transport=("hysteria" if parsed.scheme in {"hy2", "hysteria2"} else query.get("type") or query.get("transport") or "tcp"),
+        security=("tls" if parsed.scheme in {"hy2", "hysteria2"} else query.get("security") or query.get("tls")),
         sni=query.get("sni") or query.get("peer") or query.get("host"),
         fingerprint=query.get("fp") or query.get("fingerprint"),
         user_id=unquote(parsed.username or "") or None,
@@ -297,6 +300,11 @@ def _stream_settings(profile: XrayProfile) -> dict[str, Any]:
             "host": profile.params.get("host") or profile.sni or profile.host,
             "mode": profile.params.get("mode") or "auto",
         }
+    elif network == "hysteria":
+        stream["hysteriaSettings"] = {
+            "version": 2,
+            "auth": profile.user_id or "",
+        }
     return stream
 
 
@@ -320,6 +328,28 @@ def _outbound_for_profile(profile: XrayProfile, tag: str) -> dict[str, Any]:
                     }
                 ]
             },
+            "streamSettings": _stream_settings(profile),
+        }
+    if profile.protocol == "trojan":
+        return {
+            "tag": tag,
+            "protocol": "trojan",
+            "settings": {
+                "servers": [
+                    {
+                        "address": profile.host,
+                        "port": profile.port,
+                        "password": profile.user_id or "",
+                    }
+                ]
+            },
+            "streamSettings": _stream_settings(profile),
+        }
+    if profile.protocol == "hysteria":
+        return {
+            "tag": tag,
+            "protocol": "hysteria",
+            "settings": {"version": 2, "address": profile.host, "port": profile.port},
             "streamSettings": _stream_settings(profile),
         }
     return {"tag": tag, "protocol": profile.protocol, "raw_url": profile.raw_url}
