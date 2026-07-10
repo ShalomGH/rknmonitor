@@ -2,7 +2,7 @@
 
 > **LLM-агенты:** сначала прочитать [`AGENTS.md`](AGENTS.md), затем [`PROJECT_CONTEXT.md`](PROJECT_CONTEXT.md) или [`QUICKREF.md`](QUICKREF.md). Этот файл предназначен для людей: обзор проекта, архитектура и запуск central/agent.
 
-`rkn-blocks-monitoring` — система мониторинга сетевых блокировок и доступности Xray-профилей из нескольких точек наблюдения. Central-сервер хранит результаты, экспортирует метрики и показывает дашборды; edge-агенты запускаются на любых Linux-нодах и отправляют проверки в central по outbound HTTPS.
+`rkn-blocks-monitoring` — система мониторинга сетевых блокировок и доступности Xray-профилей из нескольких точек наблюдения. Central-сервер хранит результаты и экспортирует метрики; Grafana является единственным UI для дашбордов и диагностики. Edge-агенты запускаются на любых Linux-нодах и отправляют проверки в central по outbound HTTPS.
 
 ## Что делает проект
 
@@ -56,12 +56,13 @@
 - Xray используется только как локальный SOCKS-proxy внутри Docker network namespace.
 - Секреты лежат в `.env`, `.env.agent`, `.env.xray`; эти файлы не коммитятся.
 - Public installer не требует git clone и Python на машине агента.
+- Встроенного HTML/JS frontend в FastAPI нет: пользовательский интерфейс мониторинга — Grafana.
 
 ## Структура репозитория
 
 | Путь | Назначение |
 |---|---|
-| `src/rknmon/api/` | FastAPI-приложение, admin API, agent API, UI, auth middleware |
+| `src/rknmon/api/` | FastAPI-приложение, admin API, agent API, auth middleware |
 | `src/rknmon/agent/` | Код edge-агента: config, client, runner, DPI/Xray probes, CLI |
 | `src/rknmon/probes/` | HTTP/DNS probes, scheduler, classifier, evaluator, state engine |
 | `src/rknmon/db_schema.py` | Инициализация PostgreSQL-схемы без SQLAlchemy ORM |
@@ -233,8 +234,6 @@ docker compose -f docker-compose.agent.yml logs -f rknmon-xray
 |---|---:|---|---|
 | `/health` | GET | no | Liveness + DB connectivity |
 | `/metrics` | GET | no | Prometheus metrics |
-| `/ui/dashboard` | GET | no | HTML dashboard |
-| `/ui/dashboard_data` | GET | no | Dashboard JSON |
 | `/targets` | GET/POST | `X-API-Key` | CRUD целей |
 | `/targets/{id}` | GET/PATCH/DELETE | `X-API-Key` | Одна цель |
 | `/events` | GET | `X-API-Key` | События |
@@ -244,6 +243,8 @@ docker compose -f docker-compose.agent.yml logs -f rknmon-xray
 | `/export/targets` | GET | `X-API-Key` | Экспорт целей |
 | `/export/events` | GET | `X-API-Key` | Экспорт событий |
 | `/admin/agents/invites` | GET/POST | `X-API-Key` | Управление install invites |
+
+Отдельных `/ui/*` endpoints нет. Просмотр состояния, диагностика блокировок и Xray-профилей выполняются через provisioned Grafana dashboards.
 
 ## Авторизация и секреты
 

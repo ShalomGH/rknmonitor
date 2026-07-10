@@ -13,7 +13,6 @@ dependencies = [
   "apscheduler",
   "asyncpg",
   "fastapi",
-  "jinja2",
   "prometheus-client",
   "pydantic",
   "pydantic-settings",

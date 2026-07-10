@@ -1,7 +1,9 @@
 from fastapi.testclient import TestClient
+
 from rknmon.api.main import app
 
 client = TestClient(app)
+
 
 class TestHealthAndRoot:
     def test_root(self):
@@ -49,3 +51,10 @@ class TestAuthMiddleware:
         assert compose.status_code == 200
         assert "rknmon-agent" in compose.text
         assert "build:" not in compose.text
+
+
+class TestNoStandaloneFrontend:
+    def test_legacy_ui_routes_are_not_registered(self):
+        paths = {getattr(route, "path", None) for route in app.routes}
+        assert not any(path and path.startswith("/ui/") for path in paths)
+        assert "/static" not in paths

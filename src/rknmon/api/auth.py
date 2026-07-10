@@ -1,6 +1,7 @@
 from fastapi import Request
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
+
 from rknmon.config.settings import settings
 
 EXEMPT_PATHS = {
@@ -10,12 +11,11 @@ EXEMPT_PATHS = {
     "/openapi.json",
     "/docs",
     "/redoc",
-    "/ui/dashboard",
-    "/ui/dashboard_data",
     "/install-agent.sh",
     "/docker-compose.agent.public.yml",
 }
-EXEMPT_PREFIXES = ("/ui/", "/static/", "/agent/")
+EXEMPT_PREFIXES = ("/agent/",)
+
 
 class APIKeyMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
