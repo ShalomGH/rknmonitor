@@ -16,25 +16,39 @@ async def _update_state_counts():
     node_rows = await fetch("SELECT state, COUNT(*) AS n FROM target_states GROUP BY state")
     global_rows = await fetch(
         """
-        SELECT global_state AS state, COUNT(*) AS n
-        FROM (
+        WITH state_rows AS (
+            SELECT
+                ts.target_id,
+                ts.state,
+                COALESCE(pn.role, 'subject') AS role,
+                CASE ts.state
+                    WHEN 'blocked' THEN 2
+                    WHEN 'suspected' THEN 1
+                    ELSE 0
+                END AS severity
+            FROM target_states ts
+            LEFT JOIN probe_nodes pn ON pn.id = ts.probe_node_id
+        ),
+        per_target AS (
             SELECT
                 target_id,
-                CASE MAX(
-                    CASE state
-                        WHEN 'blocked' THEN 2
-                        WHEN 'suspected' THEN 1
-                        ELSE 0
-                    END
-                )
-                    WHEN 2 THEN 'blocked'
-                    WHEN 1 THEN 'suspected'
-                    ELSE 'clear'
-                END AS global_state
-            FROM target_states
+                CASE
+                    WHEN COUNT(*) FILTER (WHERE role = 'subject') > 0
+                        THEN MAX(severity) FILTER (WHERE role = 'subject')
+                    ELSE MAX(severity)
+                END AS severity
+            FROM state_rows
             GROUP BY target_id
-        ) aggregated
-        GROUP BY global_state
+        )
+        SELECT
+            CASE severity
+                WHEN 2 THEN 'blocked'
+                WHEN 1 THEN 'suspected'
+                ELSE 'clear'
+            END AS state,
+            COUNT(*) AS n
+        FROM per_target
+        GROUP BY severity
         """
     )
     update_target_state_metrics(
