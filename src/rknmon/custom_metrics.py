@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections import defaultdict
 from typing import Any
 
@@ -20,8 +21,8 @@ EVENTS_COUNTER = Counter(
 )
 PROBE_LATENCY_GAUGE = Gauge(
     "rknmon_probe_latest_response_ms",
-    "Latest probe response time per target",
-    ["target_id", "domain", "probe_type"],
+    "Latest probe response time per agent and target",
+    ["agent", "target_id", "domain", "probe_type"],
 )
 PROBE_STATUS_GAUGE = Gauge(
     "rknmon_probe_status",
@@ -38,6 +39,21 @@ PROBE_DURATION_HISTOGRAM = Histogram(
     "Ordinary probe duration distribution",
     ["agent", "probe_type", "outcome"],
     buckets=(0.01, 0.025, 0.05, 0.1, 0.25, 0.5, 1, 2.5, 5, 10, 20, 30),
+)
+AGENT_LAST_SEEN_TIMESTAMP_GAUGE = Gauge(
+    "rknmon_agent_last_seen_timestamp_seconds",
+    "Unix timestamp of the latest observed activity from an agent",
+    ["agent", "role"],
+)
+PROBE_LAST_COMPLETED_TIMESTAMP_GAUGE = Gauge(
+    "rknmon_probe_last_completed_timestamp_seconds",
+    "Unix timestamp of the latest completed ordinary probe",
+    ["agent", "probe_type"],
+)
+PROBE_LAST_SUCCESS_TIMESTAMP_GAUGE = Gauge(
+    "rknmon_probe_last_success_timestamp_seconds",
+    "Unix timestamp of the latest successful ordinary probe",
+    ["agent", "probe_type"],
 )
 ACTIVE_TARGETS_GAUGE = Gauge("rknmon_active_targets", "Number of active targets")
 BUILD_INFO = Info("rknmon_build", "Build metadata")
@@ -66,9 +82,25 @@ def record_event(event_type: str) -> None:
     EVENTS_COUNTER.labels(event_type=event_type).inc()
 
 
-def record_probe_latency(target_id: str, domain: str, probe_type: str, ms: float) -> None:
+def record_agent_seen(agent: str, role: str | None = None, timestamp: float | None = None) -> None:
+    AGENT_LAST_SEEN_TIMESTAMP_GAUGE.labels(
+        agent=agent,
+        role=role or "subject",
+    ).set(timestamp if timestamp is not None else time.time())
+
+
+def record_probe_latency(
+    agent: str,
+    target_id: str,
+    domain: str,
+    probe_type: str,
+    ms: float,
+) -> None:
     PROBE_LATENCY_GAUGE.labels(
-        target_id=str(target_id), domain=domain, probe_type=probe_type
+        agent=agent,
+        target_id=str(target_id),
+        domain=domain,
+        probe_type=probe_type,
     ).set(ms)
 
 
@@ -129,6 +161,14 @@ def record_probe_result(
         agent=agent, target_id=str(target_id), domain=domain, probe_type=probe_type
     ).set(1 if outcome == "ok" else 0)
     PROBE_RESULTS_COUNTER.labels(agent=agent, probe_type=probe_type, outcome=outcome).inc()
+    observed_at = time.time()
+    PROBE_LAST_COMPLETED_TIMESTAMP_GAUGE.labels(
+        agent=agent, probe_type=probe_type
+    ).set(observed_at)
+    if outcome == "ok":
+        PROBE_LAST_SUCCESS_TIMESTAMP_GAUGE.labels(
+            agent=agent, probe_type=probe_type
+        ).set(observed_at)
     if response_time_ms is not None:
         PROBE_DURATION_HISTOGRAM.labels(
             agent=agent, probe_type=probe_type, outcome=outcome
@@ -202,6 +242,13 @@ BLOCKING_HYPOTHESIS_GAUGE = Gauge(
     "Latest evidence-based blocking mechanism hypothesis score",
     ["agent", "target", "mechanism"],
 )
+BLOCKING_HYPOTHESIS_LAST_EVIDENCE_GAUGE = Gauge(
+    "rknmon_blocking_hypothesis_last_evidence_timestamp_seconds",
+    "Unix timestamp of the latest evidence for a blocking hypothesis",
+    ["agent", "target", "mechanism"],
+)
+HypothesisLabel = tuple[str, str, str]
+_HYPOTHESIS_LABELS_BY_AGENT: dict[str, set[HypothesisLabel]] = defaultdict(set)
 PROBE_ARTIFACT_COUNTER = Counter(
     "rknmon_probe_artifacts_total",
     "Diagnostic artifacts retained by reason and type",
@@ -297,7 +344,7 @@ def record_dpi_probe(
     latency_ms: float | None,
     error_type: str | None,
     details: dict[str, Any] | None = None,
-) -> None:
+) -> HypothesisLabel | None:
     labels = {"agent": agent, "checker": checker, "target": target, "method": method}
     DPI_CHECK_STATUS_GAUGE.labels(**labels).set(1 if ok else 0)
     outcome = "ok" if ok else (error_type or "unknown")
@@ -319,10 +366,19 @@ def record_dpi_probe(
                 stage=str(stage.get("stage") or "unknown"),
                 outcome=str(stage.get("outcome") or "unknown"),
             ).observe(max(0.0, float(stage["duration_ms"]) / 1000.0))
+
+    hypothesis_label: HypothesisLabel | None = None
     if details.get("hypothesis") and details.get("confidence") is not None:
+        mechanism = str(details["hypothesis"])
+        hypothesis_label = (agent, target, mechanism)
+        evidence_at = time.time()
         BLOCKING_HYPOTHESIS_GAUGE.labels(
-            agent=agent, target=target, mechanism=str(details["hypothesis"])
+            agent=agent, target=target, mechanism=mechanism
         ).set(float(details["confidence"]))
+        BLOCKING_HYPOTHESIS_LAST_EVIDENCE_GAUGE.labels(
+            agent=agent, target=target, mechanism=mechanism
+        ).set(evidence_at)
+
     for artifact in details.get("artifacts", []):
         if isinstance(artifact, dict):
             PROBE_ARTIFACT_COUNTER.labels(
@@ -330,6 +386,21 @@ def record_dpi_probe(
                 reason=str(artifact.get("reason") or "unknown"),
                 artifact_type=str(artifact.get("artifact_type") or "unknown"),
             ).inc()
+    return hypothesis_label
+
+
+def prune_blocking_hypothesis_metrics(
+    agent: str,
+    current: set[HypothesisLabel],
+) -> None:
+    stale = _HYPOTHESIS_LABELS_BY_AGENT[agent] - current
+    for label_tuple in stale:
+        try:
+            BLOCKING_HYPOTHESIS_GAUGE.remove(*label_tuple)
+            BLOCKING_HYPOTHESIS_LAST_EVIDENCE_GAUGE.remove(*label_tuple)
+        except KeyError:
+            pass
+    _HYPOTHESIS_LABELS_BY_AGENT[agent] = set(current)
 
 
 def set_active_targets(count: int) -> None:
