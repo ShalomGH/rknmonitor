@@ -2,7 +2,7 @@
 Locust load-test for rknmon API.
 Run: locust -f scripts/locustfile.py --host http://127.0.0.1:8000
 """
-from locust import HttpUser, task, between
+from locust import HttpUser, between, task
 
 API_KEY = "dev-key-change-me"
 
@@ -44,7 +44,3 @@ class RknmonUser(HttpUser):
     @task(1)
     def health(self):
         self.client.get("/health", headers={})
-
-    @task(1)
-    def dashboard_ui(self):
-        self.client.get("/ui/dashboard", headers={})
