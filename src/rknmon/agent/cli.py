@@ -4,8 +4,7 @@ import logging
 
 from rknmon.agent.client import AgentClient
 from rknmon.agent.config import AgentSettings
-from rknmon.agent.dpi_runner import run_dpi_probe_cycle
-from rknmon.agent.runner import run_probe_cycle, run_xray_probe_cycle
+from rknmon.agent.runner import run_dpi_probe_cycle, run_probe_cycle, run_xray_probe_cycle
 
 
 def build_parser() -> argparse.ArgumentParser:
