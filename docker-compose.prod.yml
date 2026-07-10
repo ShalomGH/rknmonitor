@@ -20,7 +20,7 @@ services:
       - rknmon
 
   app:
-    image: rknmon:1.1.0
+    image: rknmon:1.2.0
     container_name: rknmon_app
     restart: unless-stopped
     environment:
