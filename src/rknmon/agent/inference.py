@@ -12,7 +12,9 @@ def _dns_candidate(rows: list[dict[str, Any]]) -> tuple[str, float, list[str]] |
     confidence_by_error = {
         "dns_block_ip": 0.92,
         "dns_mismatch_confirmed": 0.88,
-        "dns_resolution_failure_confirmed": 0.82,
+        # Even with public references reachable, a local resolver outage or
+        # misconfiguration can look identical. Keep this below strong A/B evidence.
+        "dns_resolution_failure_confirmed": 0.68,
     }
     for row in failures:
         error_type = str(row.get("error_type") or "")
@@ -66,13 +68,17 @@ def infer_mechanisms(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if any(row.get("method") == "correct" and not row.get("ok") for row in tls) and any(
             row.get("method") != "correct" and row.get("ok") for row in tls
         ):
-            candidates.append(("sni_filter", 0.88, ["same_ip_control_variant_ok", "correct_sni_failed"]))
+            candidates.append(
+                ("sni_filter", 0.88, ["same_ip_control_variant_ok", "correct_sni_failed"])
+            )
 
         host = [row for row in rows if row.get("checker") == "host-ab"]
         if any(row.get("method") == "correct" and not row.get("ok") for row in host) and any(
             row.get("method") != "correct" and row.get("ok") for row in host
         ):
-            candidates.append(("http_host_filter", 0.88, ["same_tls_control_host_ok", "correct_host_failed"]))
+            candidates.append(
+                ("http_host_filter", 0.88, ["same_tls_control_host_ok", "correct_host_failed"])
+            )
 
         if any(row.get("checker") == "http3" and not row.get("ok") for row in rows):
             candidates.append(("quic_or_udp_interference", 0.45, ["http3_failed"]))
